@@ -42,7 +42,7 @@ const Header = () => {
           <div className="flex items-center space-x-8">
             <div className="flex items-center">
               <Calendar className="h-5 w-5 mr-2" />
-              <h1 className="text-xl font-medium">AI Scheduler</h1>
+              <h1 className="text-xl font-medium">Planify</h1>
             </div>
             
             <nav className="hidden md:flex items-center space-x-4">

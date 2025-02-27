@@ -8,8 +8,8 @@ import {
   CardTitle 
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles, ChevronLeft, ChevronRight, User } from 'lucide-react';
-import { format } from 'date-fns';
+import { Sparkles, ChevronLeft, ChevronRight, User, Circle } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import { useAuth } from '@/context/AuthContext';
 import TimeSlot from '@/components/dashboard/TimeSlot';
 import TaskCard from '@/components/dashboard/TaskCard';
@@ -95,6 +95,39 @@ const weatherData: WeatherData = {
   ]
 };
 
+// Helper function to convert 12-hour time to 24-hour format for sorting
+const convertTo24Hour = (time12h: string): number => {
+  const [time, modifier] = time12h.split(' ');
+  let [hours, minutes] = time.split(':');
+  
+  if (hours === '12') {
+    hours = '00';
+  }
+  
+  if (modifier === 'PM') {
+    hours = (parseInt(hours, 10) + 12).toString();
+  }
+  
+  return parseInt(hours + minutes, 10);
+};
+
+// Generate hours for daily planner
+const generateHours = () => {
+  const hours = [];
+  for (let i = 8; i <= 20; i++) { // 8 AM to 8 PM
+    const hour = i > 12 ? i - 12 : i;
+    const period = i >= 12 ? 'PM' : 'AM';
+    hours.push({
+      label: `${hour}:00 ${period}`,
+      value: i,
+    });
+  }
+  return hours;
+};
+
+// Days of the week for weekly view
+const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 const Dashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -105,6 +138,7 @@ const Dashboard = () => {
     completion: completionStatus,
     priority: priorityStatus
   });
+  const hours = generateHours();
 
   const handleToggleComplete = (taskId: string) => {
     setTasks(prevTasks => 
@@ -157,6 +191,37 @@ const Dashboard = () => {
       completion: { completed, pending },
       priority: { high, medium, low }
     });
+  };
+
+  const getTasksByHour = (hour: number) => {
+    return tasks.filter(task => {
+      // Parse the task time to get the hour
+      const timeString = task.time;
+      if (!timeString) return false;
+      
+      const [time, modifier] = timeString.split(' ');
+      let [taskHour, minutes] = time.split(':');
+      let hourValue = parseInt(taskHour);
+      
+      if (modifier === 'PM' && hourValue < 12) {
+        hourValue += 12;
+      } else if (modifier === 'AM' && hourValue === 12) {
+        hourValue = 0;
+      }
+      
+      return hourValue === hour;
+    });
+  };
+
+  const getTasksByDayOfWeek = (dayIndex: number) => {
+    // For mock purposes - we'd normally filter based on the day of week from task.date
+    // This is just a simplified version
+    if (dayIndex === 3) { // Wednesday - just for demo, show some tasks
+      return tasks.slice(0, 2);
+    } else if (dayIndex === 4) { // Thursday - show other tasks
+      return tasks.slice(2);
+    }
+    return [];
   };
 
   return (
@@ -243,31 +308,79 @@ const Dashboard = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="day" className="mb-8">
+              <Tabs defaultValue="day" onValueChange={setActiveTab} className="mb-8">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="day">Day</TabsTrigger>
                   <TabsTrigger value="week">Week</TabsTrigger>
                 </TabsList>
+                
+                {/* Day View */}
                 <TabsContent value="day" className="mt-4">
                   <div className="space-y-1">
-                    {Array.from({ length: 12 }).map((_, index) => {
-                      const hour = index + 12;
+                    {hours.map((hour) => {
+                      const hourTasks = getTasksByHour(hour.value);
                       return (
-                        <div key={index} className="grid grid-cols-12 py-2 text-sm group hover:bg-gray-50 rounded-md">
-                          <div className="col-span-1 text-right pr-4 text-gray-500">
-                            {hour === 12 ? '12:00 AM' : (hour > 12 ? `${hour - 12}:00 AM` : `${hour}:00 AM`)}
+                        <div key={hour.value} className="grid grid-cols-12 py-2 text-sm group hover:bg-gray-50 rounded-md">
+                          <div className="col-span-2 text-right pr-4 text-gray-500">
+                            {hour.label}
                           </div>
-                          <div className="col-span-11 border-l pl-4 min-h-8">
-                            
+                          <div className="col-span-10 border-l pl-4 min-h-16">
+                            {hourTasks.length > 0 ? (
+                              <div className="space-y-2 py-1">
+                                {hourTasks.map(task => (
+                                  <div 
+                                    key={task.id} 
+                                    className={`p-2 rounded-md border-l-4 ${task.priority === 'high' ? 'border-red-500 bg-red-50' : task.priority === 'medium' ? 'border-amber-500 bg-amber-50' : 'border-green-500 bg-green-50'}`}
+                                  >
+                                    <div className="flex items-start">
+                                      <div className="flex-1">
+                                        <div className="flex items-center">
+                                          <h4 className={`font-medium text-sm ${task.completed ? 'line-through text-gray-500' : ''}`}>
+                                            {task.title}
+                                          </h4>
+                                        </div>
+                                        <div className="flex items-center mt-1 text-xs text-gray-500">
+                                          <span>{task.time}</span>
+                                          {task.duration && <span className="ml-1">• {task.duration}</span>}
+                                          <span className="ml-2 capitalize">{task.category}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 </TabsContent>
-                <TabsContent value="week">
-                  <div className="text-center py-8 text-gray-500">
-                    Week view coming soon
+                
+                {/* Week View */}
+                <TabsContent value="week" className="mt-4">
+                  <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-md overflow-hidden">
+                    {daysOfWeek.map((day, index) => (
+                      <div key={day} className="bg-white">
+                        <div className="py-2 text-center border-b">
+                          <p className="text-sm font-medium">{day.substring(0, 3)}</p>
+                          <p className="text-xs text-gray-500">Feb {20 + index}</p>
+                        </div>
+                        <div className="min-h-[150px] p-1">
+                          {getTasksByDayOfWeek(index).map(task => (
+                            <div 
+                              key={task.id} 
+                              className={`p-1 my-1 text-xs rounded border-l-2 ${task.priority === 'high' ? 'border-red-500 bg-red-50' : task.priority === 'medium' ? 'border-amber-500 bg-amber-50' : 'border-green-500 bg-green-50'}`}
+                            >
+                              <p className={`truncate font-medium ${task.completed ? 'line-through text-gray-500' : ''}`}>
+                                {task.title}
+                              </p>
+                              <p className="text-xs text-gray-500">{task.time}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </TabsContent>
               </Tabs>
