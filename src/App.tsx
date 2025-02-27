@@ -5,12 +5,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 
 import Layout from "@/components/layout/Layout";
 import Index from "@/pages/Index";
 import Login from "@/pages/Login";
 import Tasks from "@/pages/Tasks";
 import Settings from "@/pages/Settings";
+import Notifications from "@/pages/Notifications";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +49,14 @@ const AppRoutes = () => {
         } 
       />
       <Route 
+        path="/notifications" 
+        element={
+          <ProtectedRoute>
+            <Notifications />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
         path="/settings" 
         element={
           <ProtectedRoute>
@@ -62,15 +72,17 @@ const AppRoutes = () => {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <AuthProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Layout>
-            <AppRoutes />
-          </Layout>
-        </BrowserRouter>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Layout>
+              <AppRoutes />
+            </Layout>
+          </BrowserRouter>
+        </AuthProvider>
+      </ThemeProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -18,7 +17,10 @@ import {
   Zap,
   Share2,
   HardDrive,
-  Cloud
+  Cloud,
+  Moon,
+  Sun,
+  Monitor
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,28 +30,39 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Slider } from '@/components/ui/slider';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useToast } from '@/hooks/use-toast';
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const Settings = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
+  const { theme, setTheme } = useTheme();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('account');
   const [formState, setFormState] = useState({
     name: user?.name || '',
     email: user?.email || '',
     language: 'english',
-    theme: 'light',
     emailNotifications: true,
     pushNotifications: true,
     soundEnabled: true,
     autoSave: true,
     dataSync: true,
     aiSuggestions: true,
-    colorMode: 'system',
     timezone: 'UTC-0',
     startWeek: 'monday',
     timeFormat: '12hour'
   });
+
+  useEffect(() => {
+    if (user) {
+      setFormState(prev => ({
+        ...prev,
+        name: user.name,
+        email: user.email,
+      }));
+    }
+  }, [user]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -65,6 +78,10 @@ const Settings = () => {
   };
 
   const handleSave = (section: string) => {
+    if (section === 'profile') {
+      updateUser({ name: formState.name });
+    }
+    
     toast({
       title: "Settings updated",
       description: `Your ${section} settings have been saved successfully.`
@@ -75,7 +92,7 @@ const Settings = () => {
     <div className="container mx-auto px-4 py-6 max-w-7xl animate-fade-in">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Settings</h1>
-        <p className="text-gray-600">Manage your account and application preferences</p>
+        <p className="text-gray-600 dark:text-gray-400">Manage your account and application preferences</p>
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -84,42 +101,42 @@ const Settings = () => {
             <CardContent className="p-4">
               <div className="space-y-1 py-2">
                 <button
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'account' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'account' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                   onClick={() => setActiveTab('account')}
                 >
                   <User className="h-4 w-4" />
                   Account
                 </button>
                 <button
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'appearance' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'appearance' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                   onClick={() => setActiveTab('appearance')}
                 >
                   <PaintBucket className="h-4 w-4" />
                   Appearance
                 </button>
                 <button
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'notifications' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'notifications' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                   onClick={() => setActiveTab('notifications')}
                 >
                   <Bell className="h-4 w-4" />
                   Notifications
                 </button>
                 <button
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'preferences' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'preferences' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                   onClick={() => setActiveTab('preferences')}
                 >
                   <Layout className="h-4 w-4" />
                   Preferences
                 </button>
                 <button
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'ai' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'ai' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                   onClick={() => setActiveTab('ai')}
                 >
                   <Zap className="h-4 w-4" />
                   AI Features
                 </button>
                 <button
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'data' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'data' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                   onClick={() => setActiveTab('data')}
                 >
                   <HardDrive className="h-4 w-4" />
@@ -225,24 +242,54 @@ const Settings = () => {
                 <div className="space-y-6">
                   <div className="space-y-4">
                     <h3 className="text-lg font-medium">Theme</h3>
-                    <div className="grid grid-cols-1 gap-4">
-                      <div className="space-y-2">
-                        <Label>Color Mode</Label>
-                        <Select 
-                          value={formState.colorMode}
-                          onValueChange={(value) => handleSelectChange('colorMode', value)}
+                    <RadioGroup 
+                      defaultValue={theme} 
+                      onValueChange={(value) => setTheme(value as 'light' | 'dark' | 'system')}
+                      className="grid grid-cols-3 gap-4"
+                    >
+                      <div>
+                        <RadioGroupItem 
+                          value="light" 
+                          id="theme-light" 
+                          className="sr-only" 
+                        />
+                        <Label
+                          htmlFor="theme-light"
+                          className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-white p-4 hover:bg-gray-50 hover:border-accent [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:border-blue-600"
                         >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select color mode" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="light">Light</SelectItem>
-                            <SelectItem value="dark">Dark</SelectItem>
-                            <SelectItem value="system">System</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          <Sun className="mb-3 h-6 w-6" />
+                          <span className="text-sm font-medium">Light</span>
+                        </Label>
                       </div>
-                    </div>
+                      <div>
+                        <RadioGroupItem
+                          value="dark"
+                          id="theme-dark"
+                          className="sr-only"
+                        />
+                        <Label
+                          htmlFor="theme-dark"
+                          className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-white p-4 hover:bg-gray-50 hover:border-accent [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:border-blue-600"
+                        >
+                          <Moon className="mb-3 h-6 w-6" />
+                          <span className="text-sm font-medium">Dark</span>
+                        </Label>
+                      </div>
+                      <div>
+                        <RadioGroupItem
+                          value="system"
+                          id="theme-system"
+                          className="sr-only"
+                        />
+                        <Label
+                          htmlFor="theme-system"
+                          className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-white p-4 hover:bg-gray-50 hover:border-accent [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:border-blue-600"
+                        >
+                          <Monitor className="mb-3 h-6 w-6" />
+                          <span className="text-sm font-medium">System</span>
+                        </Label>
+                      </div>
+                    </RadioGroup>
                   </div>
                   
                   <Separator />
@@ -278,7 +325,7 @@ const Settings = () => {
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <Label>Email Notifications</Label>
-                          <p className="text-sm text-gray-500">Receive task and reminder emails</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Receive task and reminder emails</p>
                         </div>
                         <Switch 
                           checked={formState.emailNotifications}
@@ -288,7 +335,7 @@ const Settings = () => {
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <Label>Push Notifications</Label>
-                          <p className="text-sm text-gray-500">Receive notifications in your browser</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Receive notifications in your browser</p>
                         </div>
                         <Switch 
                           checked={formState.pushNotifications}
@@ -298,12 +345,27 @@ const Settings = () => {
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <Label>Sound Alerts</Label>
-                          <p className="text-sm text-gray-500">Play sounds for notifications</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Play sounds for notifications</p>
                         </div>
                         <Switch 
                           checked={formState.soundEnabled}
                           onCheckedChange={(checked) => handleToggle('soundEnabled', checked)}
                         />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 border border-blue-100 dark:border-blue-800">
+                    <div className="flex items-start gap-3">
+                      <Bell className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium text-blue-800 dark:text-blue-300">Mobile Notifications</h4>
+                        <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
+                          Notifications will be sent to your connected mobile device via the AI Scheduler app. 
+                          Download the app to receive notifications on the go.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -420,7 +482,7 @@ const Settings = () => {
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <Label>AI Scheduling Suggestions</Label>
-                          <p className="text-sm text-gray-500">Get AI-powered time slot recommendations</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Get AI-powered time slot recommendations</p>
                         </div>
                         <Switch 
                           checked={formState.aiSuggestions}
@@ -437,7 +499,7 @@ const Settings = () => {
                           </div>
                           <Slider defaultValue={[70]} max={100} step={10} />
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           Higher values make the AI adapt more quickly to your changing habits
                         </p>
                       </div>
@@ -452,7 +514,7 @@ const Settings = () => {
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <Label>Share Usage Data to Improve AI</Label>
-                          <p className="text-sm text-gray-500">Help us improve recommendations (anonymized data only)</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Help us improve recommendations (anonymized data only)</p>
                         </div>
                         <Switch 
                           checked={true}
@@ -482,7 +544,7 @@ const Settings = () => {
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <Label>Autosave Changes</Label>
-                          <p className="text-sm text-gray-500">Automatically save changes to tasks and settings</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Automatically save changes to tasks and settings</p>
                         </div>
                         <Switch 
                           checked={formState.autoSave}
@@ -492,7 +554,7 @@ const Settings = () => {
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <Label>Cloud Synchronization</Label>
-                          <p className="text-sm text-gray-500">Sync your data across devices</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Sync your data across devices</p>
                         </div>
                         <Switch 
                           checked={formState.dataSync}
@@ -510,7 +572,7 @@ const Settings = () => {
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <Label>Activity Tracking</Label>
-                          <p className="text-sm text-gray-500">Track your activity to improve recommendations</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Track your activity to improve recommendations</p>
                         </div>
                         <Switch defaultChecked />
                       </div>
