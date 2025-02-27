@@ -16,6 +16,8 @@ import TaskCard from '@/components/dashboard/TaskCard';
 import DonutChart from '@/components/charts/DonutChart';
 import PriorityChart from '@/components/charts/PriorityChart';
 import WeatherWidget from '@/components/WeatherWidget';
+import LiveClock from '@/components/dashboard/LiveClock';
+import AiChatAssistant from '@/components/dashboard/AiChatAssistant';
 import { Task, TimeSlot as TimeSlotType, CompletionStatus, PriorityStatus, WeatherData } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
@@ -162,21 +164,33 @@ const Dashboard = () => {
       {/* Welcome Banner */}
       {user && (
         <Card className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-none">
-          <CardContent className="p-4 flex items-center">
-            <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center mr-4">
-              {user.avatar ? (
-                <img src={user.avatar} alt={user.name} className="h-10 w-10 rounded-full" />
-              ) : (
-                <User className="h-5 w-5 text-blue-600" />
-              )}
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center mr-4">
+                {user.avatar ? (
+                  <img src={user.avatar} alt={user.name} className="h-10 w-10 rounded-full" />
+                ) : (
+                  <User className="h-5 w-5 text-blue-600" />
+                )}
+              </div>
+              <div>
+                <h2 className="text-lg font-medium">Welcome back, {user.name}!</h2>
+                <p className="text-sm text-gray-600">You have {tasks.filter(t => !t.completed).length} pending tasks today</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-medium">Welcome back, {user.name}!</h2>
-              <p className="text-sm text-gray-600">You have {tasks.filter(t => !t.completed).length} pending tasks today</p>
+            
+            {/* Live Clock */}
+            <div className="hidden md:block">
+              <LiveClock />
             </div>
           </CardContent>
         </Card>
       )}
+      
+      {/* Mobile Clock - Only visible on mobile */}
+      <div className="md:hidden mb-6">
+        <LiveClock />
+      </div>
       
       {/* AI Suggestions */}
       <Card className="mb-8 bg-white">
@@ -308,6 +322,9 @@ const Dashboard = () => {
           <WeatherWidget weatherData={weatherData} />
         </div>
       </div>
+
+      {/* AI Chat Assistant */}
+      <AiChatAssistant />
     </div>
   );
 };

@@ -20,11 +20,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
       return storedTheme;
     }
     
-    // Check for system preference
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'system';
-    }
-    
+    // Default to light theme instead of checking system preference
     return 'light';
   });
 
