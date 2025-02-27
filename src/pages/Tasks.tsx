@@ -16,6 +16,7 @@ import TaskCard from '@/components/dashboard/TaskCard';
 import DonutChart from '@/components/charts/DonutChart';
 import PriorityChart from '@/components/charts/PriorityChart';
 import { Task, CompletionStatus, PriorityStatus } from '@/types';
+import { useToast } from '@/hooks/use-toast';
 
 // Mock data
 const mockTasks: Task[] = [
@@ -93,16 +94,41 @@ const priorityStatus: PriorityStatus = {
 };
 
 const Tasks = () => {
+  const { toast } = useToast();
   const [tasks, setTasks] = useState<Task[]>(mockTasks);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeStatus, setActiveStatus] = useState<'all' | 'pending' | 'completed'>('all');
 
   const handleToggleComplete = (taskId: string) => {
     setTasks(prevTasks => 
-      prevTasks.map(task => 
-        task.id === taskId ? { ...task, completed: !task.completed } : task
-      )
+      prevTasks.map(task => {
+        if (task.id === taskId) {
+          const newCompleted = !task.completed;
+          
+          // Show toast notification when task is completed
+          if (newCompleted) {
+            toast({
+              title: "Task completed",
+              description: `You've completed "${task.title}"!`,
+            });
+          }
+          
+          return { ...task, completed: newCompleted };
+        }
+        return task;
+      })
     );
+  };
+  
+  const handleDeleteTask = (taskId: string) => {
+    const taskToDelete = tasks.find(task => task.id === taskId);
+    
+    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+    
+    toast({
+      title: "Task deleted",
+      description: `"${taskToDelete?.title}" has been removed from your task list.`,
+    });
   };
 
   const filteredTasks = tasks.filter(task => {
@@ -168,6 +194,7 @@ const Tasks = () => {
                       key={task.id}
                       task={task}
                       onToggleComplete={handleToggleComplete}
+                      onDeleteTask={handleDeleteTask}
                     />
                   ))}
                 </div>
@@ -185,6 +212,7 @@ const Tasks = () => {
                       key={task.id}
                       task={task}
                       onToggleComplete={handleToggleComplete}
+                      onDeleteTask={handleDeleteTask}
                     />
                   ))}
                 </div>
@@ -202,6 +230,7 @@ const Tasks = () => {
                       key={task.id}
                       task={task}
                       onToggleComplete={handleToggleComplete}
+                      onDeleteTask={handleDeleteTask}
                     />
                   ))}
                 </div>

@@ -8,7 +8,7 @@ import {
   CardTitle 
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Sparkles, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '@/context/AuthContext';
 import TimeSlot from '@/components/dashboard/TimeSlot';
@@ -17,6 +17,7 @@ import DonutChart from '@/components/charts/DonutChart';
 import PriorityChart from '@/components/charts/PriorityChart';
 import WeatherWidget from '@/components/WeatherWidget';
 import { Task, TimeSlot as TimeSlotType, CompletionStatus, PriorityStatus, WeatherData } from '@/types';
+import { useToast } from '@/hooks/use-toast';
 
 // Mock data
 const timeSlots: TimeSlotType[] = [
@@ -94,20 +95,89 @@ const weatherData: WeatherData = {
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [tasks, setTasks] = useState<Task[]>(mockTasks);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState('day');
+  const [dashboardStats, setDashboardStats] = useState({
+    completion: completionStatus,
+    priority: priorityStatus
+  });
 
   const handleToggleComplete = (taskId: string) => {
     setTasks(prevTasks => 
-      prevTasks.map(task => 
-        task.id === taskId ? { ...task, completed: !task.completed } : task
-      )
+      prevTasks.map(task => {
+        if (task.id === taskId) {
+          const newCompleted = !task.completed;
+          
+          // Show toast notification when task is completed
+          if (newCompleted) {
+            toast({
+              title: "Task completed",
+              description: `You've completed "${task.title}"!`,
+            });
+          }
+          
+          return { ...task, completed: newCompleted };
+        }
+        return task;
+      })
     );
+    
+    // Update dashboard stats when task completion status changes
+    updateDashboardStats();
+  };
+  
+  const handleDeleteTask = (taskId: string) => {
+    const taskToDelete = tasks.find(task => task.id === taskId);
+    
+    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+    
+    toast({
+      title: "Task deleted",
+      description: `"${taskToDelete?.title}" has been removed from your schedule.`,
+    });
+    
+    // Update dashboard stats when a task is deleted
+    updateDashboardStats();
+  };
+  
+  const updateDashboardStats = () => {
+    // This would typically be more sophisticated, but for demo purposes:
+    const completed = tasks.filter(task => task.completed).length;
+    const pending = tasks.filter(task => !task.completed).length;
+    
+    const high = tasks.filter(task => task.priority === 'high').length;
+    const medium = tasks.filter(task => task.priority === 'medium').length;
+    const low = tasks.filter(task => task.priority === 'low').length;
+    
+    setDashboardStats({
+      completion: { completed, pending },
+      priority: { high, medium, low }
+    });
   };
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl">
+      {/* Welcome Banner */}
+      {user && (
+        <Card className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-none">
+          <CardContent className="p-4 flex items-center">
+            <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center mr-4">
+              {user.avatar ? (
+                <img src={user.avatar} alt={user.name} className="h-10 w-10 rounded-full" />
+              ) : (
+                <User className="h-5 w-5 text-blue-600" />
+              )}
+            </div>
+            <div>
+              <h2 className="text-lg font-medium">Welcome back, {user.name}!</h2>
+              <p className="text-sm text-gray-600">You have {tasks.filter(t => !t.completed).length} pending tasks today</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
       {/* AI Suggestions */}
       <Card className="mb-8 bg-white">
         <CardHeader className="pb-3">
@@ -207,6 +277,7 @@ const Dashboard = () => {
                     key={task.id}
                     task={task}
                     onToggleComplete={handleToggleComplete}
+                    onDeleteTask={handleDeleteTask}
                   />
                 ))}
               </div>
@@ -224,11 +295,11 @@ const Dashboard = () => {
             <CardContent className="grid grid-cols-1 gap-6">
               <div>
                 <h4 className="text-sm font-medium mb-2">Completion Status</h4>
-                <DonutChart data={completionStatus} />
+                <DonutChart data={dashboardStats.completion} />
               </div>
               <div>
                 <h4 className="text-sm font-medium mb-2">Task Priority</h4>
-                <PriorityChart data={priorityStatus} />
+                <PriorityChart data={dashboardStats.priority} />
               </div>
             </CardContent>
           </Card>

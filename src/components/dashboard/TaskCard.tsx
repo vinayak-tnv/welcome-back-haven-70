@@ -1,15 +1,17 @@
 
 import React from 'react';
-import { Clock, Briefcase, User, Activity } from 'lucide-react';
+import { Clock, Briefcase, User, Activity, Trash2 } from 'lucide-react';
 import { Task } from '@/types';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 
 interface TaskCardProps {
   task: Task;
   onToggleComplete: (id: string) => void;
+  onDeleteTask: (id: string) => void;
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onToggleComplete }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, onToggleComplete, onDeleteTask }) => {
   const getCategoryIcon = () => {
     switch (task.category) {
       case 'work':
@@ -71,6 +73,15 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggleComplete }) => {
             </div>
           </div>
         </div>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50"
+          onClick={() => onDeleteTask(task.id)}
+          title="Delete task"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   );
