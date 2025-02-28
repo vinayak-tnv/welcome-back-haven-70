@@ -81,9 +81,12 @@ const Dashboard = () => {
 
   // Change quote every 1 minute
   useEffect(() => {
+    const randomIndex = Math.floor(Math.random() * motivationalQuotes.length);
+    setQuote(motivationalQuotes[randomIndex]);
+    
     const quoteInterval = setInterval(() => {
-      const randomIndex = Math.floor(Math.random() * motivationalQuotes.length);
-      setQuote(motivationalQuotes[randomIndex]);
+      const newRandomIndex = Math.floor(Math.random() * motivationalQuotes.length);
+      setQuote(motivationalQuotes[newRandomIndex]);
     }, 60000);
     
     return () => clearInterval(quoteInterval);
@@ -356,7 +359,7 @@ const Dashboard = () => {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg font-medium">February 27</CardTitle>
+                <CardTitle className="text-lg font-medium">Today's Tasks</CardTitle>
                 <button className="text-xs text-gray-500 flex items-center">
                   Hide Completed
                 </button>
@@ -364,14 +367,20 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-1">
-                {tasks.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onToggleComplete={handleToggleComplete}
-                    onDeleteTask={handleDeleteTask}
-                  />
-                ))}
+                {tasks.length > 0 ? (
+                  tasks.map(task => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      onToggleComplete={handleToggleComplete}
+                      onDeleteTask={handleDeleteTask}
+                    />
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No tasks for today. Add tasks from the Tasks page.</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

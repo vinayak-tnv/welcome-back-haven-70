@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Card, 
@@ -23,7 +24,6 @@ import {
   BookOpen,
   AlertCircle,
   ListTodo,
-  Spotify,
   SkipForward,
   SkipBack,
   Headphones
@@ -35,8 +35,8 @@ import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
 import { useTasks } from '@/context/TaskContext';
 
-// Mock Spotify data for UI display
-const spotifyPlaylists = [
+// Mock Musify data for UI display
+const musifyPlaylists = [
   { id: '1', name: 'Focus Flow', songs: 24, image: 'https://i.scdn.co/image/ab67706f00000002e4eadd417a05b2546e866934' },
   { id: '2', name: 'Deep Focus', songs: 18, image: 'https://i.scdn.co/image/ab67706f00000002fe24d7084be472288cd6ee6c' },
   { id: '3', name: 'Study Beats', songs: 32, image: 'https://i.scdn.co/image/ab67706f00000002724554ed6bed6f051d9b0bfc' },
@@ -45,7 +45,7 @@ const spotifyPlaylists = [
 
 const currentlyPlayingSong = {
   title: "Focus Flow",
-  artist: "Spotify • Study Playlist",
+  artist: "Musify • Study Playlist",
   coverArt: "https://i.scdn.co/image/ab67706f00000002e4eadd417a05b2546e866934",
   progress: 35,
   duration: "3:42"
@@ -55,7 +55,7 @@ const Focus = () => {
   const { toast } = useToast();
   const { tasks } = useTasks();
   const [activeTab, setActiveTab] = useState('pomodoro');
-  const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
+  const [isMusifyConnected, setIsMusifyConnected] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedPlaylist, setSelectedPlaylist] = useState<string | null>(null);
   
@@ -243,11 +243,11 @@ const Focus = () => {
     }
   };
 
-  const handleConnectSpotify = () => {
-    setIsSpotifyConnected(true);
+  const handleConnectMusify = () => {
+    setIsMusifyConnected(true);
     toast({
-      title: "Spotify Connected",
-      description: "Your Spotify account has been successfully connected.",
+      title: "Musify Connected",
+      description: "Your Musify account has been successfully connected.",
     });
   };
   
@@ -260,7 +260,7 @@ const Focus = () => {
     setIsPlaying(true);
     toast({
       title: "Playing Playlist",
-      description: "Now playing " + spotifyPlaylists.find(p => p.id === id)?.name,
+      description: "Now playing " + musifyPlaylists.find(p => p.id === id)?.name,
     });
   };
 
@@ -271,8 +271,8 @@ const Focus = () => {
         <p className="text-gray-600">Stay productive with timers, trackers, and focus tools</p>
       </div>
       
-      {/* Spotify mini player - fixed at the bottom */}
-      {isSpotifyConnected && isPlaying && (
+      {/* Musify mini player - fixed at the bottom */}
+      {isMusifyConnected && isPlaying && (
         <div className="fixed bottom-0 left-0 right-0 bg-gray-900 text-white z-30 p-3 shadow-lg">
           <div className="container mx-auto flex items-center justify-between max-w-7xl">
             <div className="flex items-center">
@@ -563,47 +563,47 @@ const Focus = () => {
         
         {/* Focus Tips and Tools Column */}
         <div className="space-y-6">
-          {/* Spotify Integration */}
+          {/* Musify Integration */}
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Spotify className="h-5 w-5 text-green-500" />
-                  <CardTitle>Spotify</CardTitle>
+                  <Music className="h-5 w-5 text-purple-500" />
+                  <CardTitle>Musify</CardTitle>
                 </div>
-                {isSpotifyConnected && (
-                  <Badge variant="outline" className="bg-green-50 text-green-600 border-green-200">
+                {isMusifyConnected && (
+                  <Badge variant="outline" className="bg-purple-50 text-purple-600 border-purple-200">
                     Connected
                   </Badge>
                 )}
               </div>
               <CardDescription>
-                Connect to Spotify to play focus music
+                Connect to Musify to play focus music
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {!isSpotifyConnected ? (
+              {!isMusifyConnected ? (
                 <div className="flex flex-col items-center justify-center py-8">
-                  <Spotify className="h-12 w-12 text-gray-300 mb-3" />
+                  <Music className="h-12 w-12 text-gray-300 mb-3" />
                   <p className="text-gray-500 text-center mb-4">
-                    Connect your Spotify account to listen to focus music while you work
+                    Connect your Musify account to listen to focus music while you work
                   </p>
                   <Button 
-                    onClick={handleConnectSpotify} 
-                    className="bg-green-600 hover:bg-green-700"
+                    onClick={handleConnectMusify} 
+                    className="bg-purple-600 hover:bg-purple-700"
                   >
-                    <Spotify className="h-4 w-4 mr-2" />
-                    Connect Spotify
+                    <Music className="h-4 w-4 mr-2" />
+                    Connect Musify
                   </Button>
                 </div>
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-3">
-                    {spotifyPlaylists.map(playlist => (
+                    {musifyPlaylists.map(playlist => (
                       <div
                         key={playlist.id}
                         className={`border rounded-md p-2 cursor-pointer transition-all hover:shadow-md ${
-                          selectedPlaylist === playlist.id ? 'border-green-500 bg-green-50' : ''
+                          selectedPlaylist === playlist.id ? 'border-purple-500 bg-purple-50' : ''
                         }`}
                         onClick={() => handleSelectPlaylist(playlist.id)}
                       >
