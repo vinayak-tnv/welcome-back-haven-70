@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -8,7 +8,7 @@ import {
   CardTitle 
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { Sparkles, ChevronLeft, ChevronRight, User, Quote } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import TimeSlot from '@/components/dashboard/TimeSlot';
 import TaskCard from '@/components/dashboard/TaskCard';
@@ -41,6 +41,18 @@ const weatherData: WeatherData = {
   ]
 };
 
+// Motivational quotes
+const motivationalQuotes = [
+  { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+  { text: "It always seems impossible until it's done.", author: "Nelson Mandela" },
+  { text: "Don't watch the clock; do what it does. Keep going.", author: "Sam Levenson" },
+  { text: "Believe you can and you're halfway there.", author: "Theodore Roosevelt" },
+  { text: "Your time is limited, don't waste it living someone else's life.", author: "Steve Jobs" },
+  { text: "Success is not final, failure is not fatal: It is the courage to continue that counts.", author: "Winston Churchill" },
+  { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
+  { text: "You don't have to be great to start, but you have to start to be great.", author: "Zig Ziglar" }
+];
+
 // Generate hours for daily planner
 const generateHours = () => {
   const hours = [];
@@ -65,6 +77,17 @@ const Dashboard = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState('day');
   const hours = generateHours();
+  const [quote, setQuote] = useState(motivationalQuotes[0]);
+
+  // Change quote every 1 minute
+  useEffect(() => {
+    const quoteInterval = setInterval(() => {
+      const randomIndex = Math.floor(Math.random() * motivationalQuotes.length);
+      setQuote(motivationalQuotes[randomIndex]);
+    }, 60000);
+    
+    return () => clearInterval(quoteInterval);
+  }, []);
 
   const handleToggleComplete = (taskId: string) => {
     toggleTaskCompletion(taskId);
@@ -130,14 +153,20 @@ const Dashboard = () => {
   };
 
   const getTasksByDayOfWeek = (dayIndex: number) => {
-    // For mock purposes - we'd normally filter based on the day of week from task.date
-    // This is just a simplified version
-    if (dayIndex === 3) { // Wednesday - just for demo, show some tasks
-      return tasks.slice(0, 2);
-    } else if (dayIndex === 4) { // Thursday - show other tasks
-      return tasks.slice(2);
-    }
-    return [];
+    // Get current date and determine the date for the given day index
+    const today = new Date();
+    const currentDayIndex = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    
+    // Calculate the difference in days
+    const diff = dayIndex - currentDayIndex;
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() + diff);
+    
+    // Format the target date as 'YYYY-MM-DD' to match task.date format
+    const formattedDate = targetDate.toISOString().split('T')[0];
+    
+    // Filter tasks for the target date
+    return tasks.filter(task => task.date === formattedDate);
   };
 
   return (
@@ -172,6 +201,17 @@ const Dashboard = () => {
       <div className="md:hidden mb-6">
         <LiveClock />
       </div>
+      
+      {/* Quote of the day */}
+      <Card className="mb-6 bg-gray-50 border-none">
+        <CardContent className="p-4 flex items-start">
+          <Quote className="h-6 w-6 text-blue-500 mr-4 flex-shrink-0 mt-1" />
+          <div>
+            <p className="text-lg font-medium italic text-gray-800">{quote.text}</p>
+            <p className="text-sm text-gray-600 mt-1">— {quote.author}</p>
+          </div>
+        </CardContent>
+      </Card>
       
       {/* AI Suggestions */}
       <Card className="mb-8 bg-white">
@@ -276,27 +316,36 @@ const Dashboard = () => {
                 {/* Week View */}
                 <TabsContent value="week" className="mt-4">
                   <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-md overflow-hidden">
-                    {daysOfWeek.map((day, index) => (
-                      <div key={day} className="bg-white">
-                        <div className="py-2 text-center border-b">
-                          <p className="text-sm font-medium">{day.substring(0, 3)}</p>
-                          <p className="text-xs text-gray-500">Feb {20 + index}</p>
+                    {daysOfWeek.map((day, index) => {
+                      const dayTasks = getTasksByDayOfWeek(index);
+                      return (
+                        <div key={day} className="bg-white">
+                          <div className="py-2 text-center border-b">
+                            <p className="text-sm font-medium">{day.substring(0, 3)}</p>
+                            <p className="text-xs text-gray-500">Feb {20 + index}</p>
+                          </div>
+                          <div className="min-h-[150px] p-1">
+                            {dayTasks.length > 0 ? (
+                              dayTasks.map(task => (
+                                <div 
+                                  key={task.id} 
+                                  className={`p-1 my-1 text-xs rounded border-l-2 ${task.priority === 'high' ? 'border-red-500 bg-red-50' : task.priority === 'medium' ? 'border-amber-500 bg-amber-50' : 'border-green-500 bg-green-50'}`}
+                                >
+                                  <p className={`truncate font-medium ${task.completed ? 'line-through text-gray-500' : ''}`}>
+                                    {task.title}
+                                  </p>
+                                  <p className="text-xs text-gray-500">{task.time}</p>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="flex items-center justify-center h-full">
+                                <p className="text-xs text-gray-400">No tasks</p>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className="min-h-[150px] p-1">
-                          {getTasksByDayOfWeek(index).map(task => (
-                            <div 
-                              key={task.id} 
-                              className={`p-1 my-1 text-xs rounded border-l-2 ${task.priority === 'high' ? 'border-red-500 bg-red-50' : task.priority === 'medium' ? 'border-amber-500 bg-amber-50' : 'border-green-500 bg-green-50'}`}
-                            >
-                              <p className={`truncate font-medium ${task.completed ? 'line-through text-gray-500' : ''}`}>
-                                {task.title}
-                              </p>
-                              <p className="text-xs text-gray-500">{task.time}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </TabsContent>
               </Tabs>

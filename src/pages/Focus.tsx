@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Card, 
@@ -23,17 +22,42 @@ import {
   CheckCircle,
   BookOpen,
   AlertCircle,
-  ListTodo
+  ListTodo,
+  Spotify,
+  SkipForward,
+  SkipBack,
+  Headphones
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import AiChatAssistant from '@/components/dashboard/AiChatAssistant';
 import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
+import { useTasks } from '@/context/TaskContext';
+
+// Mock Spotify data for UI display
+const spotifyPlaylists = [
+  { id: '1', name: 'Focus Flow', songs: 24, image: 'https://i.scdn.co/image/ab67706f00000002e4eadd417a05b2546e866934' },
+  { id: '2', name: 'Deep Focus', songs: 18, image: 'https://i.scdn.co/image/ab67706f00000002fe24d7084be472288cd6ee6c' },
+  { id: '3', name: 'Study Beats', songs: 32, image: 'https://i.scdn.co/image/ab67706f00000002724554ed6bed6f051d9b0bfc' },
+  { id: '4', name: 'Instrumental Study', songs: 15, image: 'https://i.scdn.co/image/ab67706f00000002724554ed6bed6f051d9b0bfc' }
+];
+
+const currentlyPlayingSong = {
+  title: "Focus Flow",
+  artist: "Spotify • Study Playlist",
+  coverArt: "https://i.scdn.co/image/ab67706f00000002e4eadd417a05b2546e866934",
+  progress: 35,
+  duration: "3:42"
+};
 
 const Focus = () => {
   const { toast } = useToast();
+  const { tasks } = useTasks();
   const [activeTab, setActiveTab] = useState('pomodoro');
+  const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<string | null>(null);
   
   // Timer states
   const [timeLeft, setTimeLeft] = useState(25 * 60); // 25 minutes in seconds
@@ -57,7 +81,20 @@ const Focus = () => {
   
   // Sound states
   const [volume, setVolume] = useState(50);
-  const [selectedSound, setSelectedSound] = useState('rain');
+  
+  useEffect(() => {
+    // Fetch tasks from main task list that are not completed
+    const pendingTasks = tasks.filter(task => !task.completed);
+    if (pendingTasks.length > 0) {
+      // Map to focus task format (just keeping it simple)
+      const mappedTasks = pendingTasks.slice(0, 5).map(task => ({
+        id: task.id,
+        title: task.title,
+        completed: false
+      }));
+      setFocusTasks([...mappedTasks, ...focusTasks]);
+    }
+  }, [tasks]);
   
   // Effect for timer
   useEffect(() => {
@@ -206,6 +243,27 @@ const Focus = () => {
     }
   };
 
+  const handleConnectSpotify = () => {
+    setIsSpotifyConnected(true);
+    toast({
+      title: "Spotify Connected",
+      description: "Your Spotify account has been successfully connected.",
+    });
+  };
+  
+  const handlePlayPause = () => {
+    setIsPlaying(!isPlaying);
+  };
+  
+  const handleSelectPlaylist = (id: string) => {
+    setSelectedPlaylist(id);
+    setIsPlaying(true);
+    toast({
+      title: "Playing Playlist",
+      description: "Now playing " + spotifyPlaylists.find(p => p.id === id)?.name,
+    });
+  };
+
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl animate-fade-in">
       <div className="mb-8">
@@ -213,7 +271,73 @@ const Focus = () => {
         <p className="text-gray-600">Stay productive with timers, trackers, and focus tools</p>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Spotify mini player - fixed at the bottom */}
+      {isSpotifyConnected && isPlaying && (
+        <div className="fixed bottom-0 left-0 right-0 bg-gray-900 text-white z-30 p-3 shadow-lg">
+          <div className="container mx-auto flex items-center justify-between max-w-7xl">
+            <div className="flex items-center">
+              <img 
+                src={currentlyPlayingSong.coverArt} 
+                alt="Album cover" 
+                className="h-12 w-12 rounded mr-3" 
+              />
+              <div>
+                <h4 className="font-medium text-sm">{currentlyPlayingSong.title}</h4>
+                <p className="text-xs text-gray-400">{currentlyPlayingSong.artist}</p>
+              </div>
+            </div>
+            
+            <div className="flex-1 mx-6 hidden md:block">
+              <div className="flex items-center justify-center gap-4">
+                <Button size="icon" variant="ghost" className="text-gray-300 hover:text-white">
+                  <SkipBack className="h-4 w-4" />
+                </Button>
+                <Button 
+                  size="icon" 
+                  className="bg-white text-black hover:bg-gray-200 rounded-full h-8 w-8"
+                  onClick={handlePlayPause}
+                >
+                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                </Button>
+                <Button size="icon" variant="ghost" className="text-gray-300 hover:text-white">
+                  <SkipForward className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-gray-400">1:18</span>
+                <Progress value={currentlyPlayingSong.progress} className="h-1 bg-gray-700" />
+                <span className="text-xs text-gray-400">{currentlyPlayingSong.duration}</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center md:gap-4">
+              {/* Mobile play controls */}
+              <Button 
+                size="icon" 
+                className="md:hidden bg-white text-black hover:bg-gray-200 rounded-full h-8 w-8 mr-2"
+                onClick={handlePlayPause}
+              >
+                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              </Button>
+              
+              <div className="flex items-center gap-2 ml-2 max-w-[100px] md:max-w-[150px]">
+                <Volume2 className="h-4 w-4 text-gray-400" />
+                <Slider
+                  value={[volume]}
+                  min={0}
+                  max={100}
+                  step={1}
+                  onValueChange={(values) => setVolume(values[0])}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-16">
         {/* Timer Column */}
         <div className="lg:col-span-2 space-y-8">
           <Card>
@@ -439,75 +563,79 @@ const Focus = () => {
         
         {/* Focus Tips and Tools Column */}
         <div className="space-y-6">
+          {/* Spotify Integration */}
           <Card>
-            <CardHeader>
-              <CardTitle>Focus Ambience</CardTitle>
-              <CardDescription>Background sounds to help you focus</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-2">
-                  <Button 
-                    variant={selectedSound === 'rain' ? 'default' : 'outline'}
-                    className="h-auto py-3"
-                    onClick={() => setSelectedSound('rain')}
-                  >
-                    <div className="flex flex-col items-center">
-                      <Music className="h-5 w-5 mb-1" />
-                      <span className="text-sm">Rain</span>
-                    </div>
-                  </Button>
-                  <Button 
-                    variant={selectedSound === 'forest' ? 'default' : 'outline'}
-                    className="h-auto py-3"
-                    onClick={() => setSelectedSound('forest')}
-                  >
-                    <div className="flex flex-col items-center">
-                      <Music className="h-5 w-5 mb-1" />
-                      <span className="text-sm">Forest</span>
-                    </div>
-                  </Button>
-                  <Button 
-                    variant={selectedSound === 'cafe' ? 'default' : 'outline'}
-                    className="h-auto py-3"
-                    onClick={() => setSelectedSound('cafe')}
-                  >
-                    <div className="flex flex-col items-center">
-                      <Music className="h-5 w-5 mb-1" />
-                      <span className="text-sm">Café</span>
-                    </div>
-                  </Button>
-                  <Button 
-                    variant={selectedSound === 'white' ? 'default' : 'outline'}
-                    className="h-auto py-3"
-                    onClick={() => setSelectedSound('white')}
-                  >
-                    <div className="flex flex-col items-center">
-                      <Music className="h-5 w-5 mb-1" />
-                      <span className="text-sm">White Noise</span>
-                    </div>
-                  </Button>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Spotify className="h-5 w-5 text-green-500" />
+                  <CardTitle>Spotify</CardTitle>
                 </div>
-                
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="volume">Volume</Label>
-                    <span className="text-sm text-gray-500">{volume}%</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Volume2 className="h-4 w-4 text-gray-500" />
-                    <Slider
-                      id="volume"
-                      value={[volume]}
-                      min={0}
-                      max={100}
-                      step={1}
-                      onValueChange={(values) => setVolume(values[0])}
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
+                {isSpotifyConnected && (
+                  <Badge variant="outline" className="bg-green-50 text-green-600 border-green-200">
+                    Connected
+                  </Badge>
+                )}
               </div>
+              <CardDescription>
+                Connect to Spotify to play focus music
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!isSpotifyConnected ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <Spotify className="h-12 w-12 text-gray-300 mb-3" />
+                  <p className="text-gray-500 text-center mb-4">
+                    Connect your Spotify account to listen to focus music while you work
+                  </p>
+                  <Button 
+                    onClick={handleConnectSpotify} 
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <Spotify className="h-4 w-4 mr-2" />
+                    Connect Spotify
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    {spotifyPlaylists.map(playlist => (
+                      <div
+                        key={playlist.id}
+                        className={`border rounded-md p-2 cursor-pointer transition-all hover:shadow-md ${
+                          selectedPlaylist === playlist.id ? 'border-green-500 bg-green-50' : ''
+                        }`}
+                        onClick={() => handleSelectPlaylist(playlist.id)}
+                      >
+                        <img 
+                          src={playlist.image} 
+                          alt={playlist.name} 
+                          className="w-full h-24 object-cover rounded-md mb-2" 
+                        />
+                        <h4 className="font-medium text-sm truncate">{playlist.name}</h4>
+                        <p className="text-xs text-gray-500">{playlist.songs} songs</p>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-2">
+                      <Headphones className="h-4 w-4 text-gray-500" />
+                      <span className="text-sm text-gray-500">Volume</span>
+                    </div>
+                    <div className="flex items-center gap-2 w-32">
+                      <Slider
+                        value={[volume]}
+                        min={0}
+                        max={100}
+                        step={1}
+                        onValueChange={(values) => setVolume(values[0])}
+                      />
+                      <span className="text-xs text-gray-500 w-5">{volume}%</span>
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
           
