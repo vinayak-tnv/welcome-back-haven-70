@@ -111,7 +111,7 @@ const Notifications = () => {
             
             <div className="mt-4">
               <p className="text-sm text-gray-500">
-                Don't have the mobile app yet? Scan the QR code or search for "AI Scheduler" in your app store.
+                Don't have the mobile app yet? Scan the QR code or search for "Planify" in your app store.
               </p>
               <div className="flex items-center justify-center mt-4">
                 <div className="bg-gray-200 w-32 h-32 rounded-lg flex items-center justify-center">

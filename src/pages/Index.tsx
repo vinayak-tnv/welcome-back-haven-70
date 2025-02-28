@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -8,8 +8,7 @@ import {
   CardTitle 
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles, ChevronLeft, ChevronRight, User, Circle } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { Sparkles, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import TimeSlot from '@/components/dashboard/TimeSlot';
 import TaskCard from '@/components/dashboard/TaskCard';
@@ -18,8 +17,9 @@ import PriorityChart from '@/components/charts/PriorityChart';
 import WeatherWidget from '@/components/WeatherWidget';
 import LiveClock from '@/components/dashboard/LiveClock';
 import AiChatAssistant from '@/components/dashboard/AiChatAssistant';
-import { Task, TimeSlot as TimeSlotType, CompletionStatus, PriorityStatus, WeatherData } from '@/types';
+import { TimeSlot as TimeSlotType, WeatherData } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { useTasks } from '@/context/TaskContext';
 
 // Mock data
 const timeSlots: TimeSlotType[] = [
@@ -27,60 +27,6 @@ const timeSlots: TimeSlotType[] = [
   { id: '2', time: '12:30 PM' },
   { id: '3', time: '3:00 PM' },
 ];
-
-const mockTasks: Task[] = [
-  {
-    id: '1',
-    title: 'Team meeting with design department',
-    description: 'Discuss upcoming product redesign and timeline',
-    time: '10:00 AM',
-    duration: '1h',
-    priority: 'high',
-    category: 'meeting',
-    completed: false,
-    date: '2023-02-27'
-  },
-  {
-    id: '2',
-    title: 'Lunch with Sarah',
-    time: '12:00 PM',
-    priority: 'low',
-    category: 'personal',
-    completed: false,
-    date: '2023-02-27'
-  },
-  {
-    id: '3',
-    title: 'Complete quarterly report',
-    time: '2:30 PM',
-    duration: '30m',
-    priority: 'medium',
-    category: 'work',
-    completed: false,
-    date: '2023-02-27'
-  },
-  {
-    id: '4',
-    title: 'Gym workout',
-    time: '5:00 PM',
-    duration: '45m',
-    priority: 'medium',
-    category: 'health',
-    completed: false,
-    date: '2023-02-27'
-  }
-];
-
-const completionStatus: CompletionStatus = {
-  completed: 8,
-  pending: 2
-};
-
-const priorityStatus: PriorityStatus = {
-  high: 3,
-  medium: 4,
-  low: 3
-};
 
 const weatherData: WeatherData = {
   temp: 32,
@@ -93,22 +39,6 @@ const weatherData: WeatherData = {
     { day: 'Sat', condition: 'sunny', temp: 34 },
     { day: 'Sun', condition: 'cloudy', temp: 30 }
   ]
-};
-
-// Helper function to convert 12-hour time to 24-hour format for sorting
-const convertTo24Hour = (time12h: string): number => {
-  const [time, modifier] = time12h.split(' ');
-  let [hours, minutes] = time.split(':');
-  
-  if (hours === '12') {
-    hours = '00';
-  }
-  
-  if (modifier === 'PM') {
-    hours = (parseInt(hours, 10) + 12).toString();
-  }
-  
-  return parseInt(hours + minutes, 10);
 };
 
 // Generate hours for daily planner
@@ -131,66 +61,52 @@ const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Fri
 const Dashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [tasks, setTasks] = useState<Task[]>(mockTasks);
+  const { tasks, toggleTaskCompletion, deleteTask } = useTasks();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState('day');
-  const [dashboardStats, setDashboardStats] = useState({
-    completion: completionStatus,
-    priority: priorityStatus
-  });
   const hours = generateHours();
 
   const handleToggleComplete = (taskId: string) => {
-    setTasks(prevTasks => 
-      prevTasks.map(task => {
-        if (task.id === taskId) {
-          const newCompleted = !task.completed;
-          
-          // Show toast notification when task is completed
-          if (newCompleted) {
-            toast({
-              title: "Task completed",
-              description: `You've completed "${task.title}"!`,
-            });
-          }
-          
-          return { ...task, completed: newCompleted };
-        }
-        return task;
-      })
-    );
+    toggleTaskCompletion(taskId);
     
-    // Update dashboard stats when task completion status changes
-    updateDashboardStats();
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    
+    if (taskToUpdate) {
+      const newCompleted = !taskToUpdate.completed;
+      
+      // Show toast notification when task is completed
+      if (newCompleted) {
+        toast({
+          title: "Task completed",
+          description: `You've completed "${taskToUpdate.title}"!`,
+        });
+      }
+    }
   };
   
   const handleDeleteTask = (taskId: string) => {
     const taskToDelete = tasks.find(task => task.id === taskId);
     
-    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
-    
-    toast({
-      title: "Task deleted",
-      description: `"${taskToDelete?.title}" has been removed from your schedule.`,
-    });
-    
-    // Update dashboard stats when a task is deleted
-    updateDashboardStats();
+    if (taskToDelete) {
+      deleteTask(taskId);
+      
+      toast({
+        title: "Task deleted",
+        description: `"${taskToDelete.title}" has been removed from your schedule.`,
+      });
+    }
   };
-  
-  const updateDashboardStats = () => {
-    // This would typically be more sophisticated, but for demo purposes:
-    const completed = tasks.filter(task => task.completed).length;
-    const pending = tasks.filter(task => !task.completed).length;
-    
-    const high = tasks.filter(task => task.priority === 'high').length;
-    const medium = tasks.filter(task => task.priority === 'medium').length;
-    const low = tasks.filter(task => task.priority === 'low').length;
-    
-    setDashboardStats({
-      completion: { completed, pending },
-      priority: { high, medium, low }
-    });
+
+  // Calculate stats for the charts
+  const completionStatus = {
+    completed: tasks.filter(task => task.completed).length,
+    pending: tasks.filter(task => !task.completed).length
+  };
+
+  const priorityStatus = {
+    high: tasks.filter(task => task.priority === 'high').length,
+    medium: tasks.filter(task => task.priority === 'medium').length,
+    low: tasks.filter(task => task.priority === 'low').length
   };
 
   const getTasksByHour = (hour: number) => {
@@ -422,11 +338,11 @@ const Dashboard = () => {
             <CardContent className="grid grid-cols-1 gap-6">
               <div>
                 <h4 className="text-sm font-medium mb-2">Completion Status</h4>
-                <DonutChart data={dashboardStats.completion} />
+                <DonutChart data={completionStatus} />
               </div>
               <div>
                 <h4 className="text-sm font-medium mb-2">Task Priority</h4>
-                <PriorityChart data={dashboardStats.priority} />
+                <PriorityChart data={priorityStatus} />
               </div>
             </CardContent>
           </Card>

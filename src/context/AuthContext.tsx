@@ -12,14 +12,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock user data
-const mockUser: User = {
-  id: '1',
-  name: 'John Doe',
-  email: 'john@example.com',
-  avatar: 'https://i.pravatar.cc/150?img=68'
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,8 +31,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setTimeout(() => {
         // Simulate basic validation
         if (email && password.length >= 6) {
-          setUser(mockUser);
-          localStorage.setItem('user', JSON.stringify(mockUser));
+          // Extract name from email (use part before @ as name)
+          const name = email.split('@')[0].split('.').map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1)
+          ).join(' ');
+          
+          const loggedInUser: User = {
+            id: '1',
+            name: name,
+            email: email,
+            avatar: 'https://i.pravatar.cc/150?img=68'
+          };
+          
+          setUser(loggedInUser);
+          localStorage.setItem('user', JSON.stringify(loggedInUser));
           resolve();
         } else {
           reject(new Error('Invalid credentials'));

@@ -15,7 +15,7 @@ import { Plus, Search, Filter, ArrowUpDown, Clock, X } from 'lucide-react';
 import TaskCard from '@/components/dashboard/TaskCard';
 import DonutChart from '@/components/charts/DonutChart';
 import PriorityChart from '@/components/charts/PriorityChart';
-import { Task, CompletionStatus, PriorityStatus } from '@/types';
+import { CompletionStatus, PriorityStatus } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import AiChatSuggestions from '@/components/dashboard/AiChatSuggestions';
 import {
@@ -28,70 +28,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
-
-// Mock data
-const mockTasks: Task[] = [
-  {
-    id: '1',
-    title: 'Team meeting with design department',
-    description: 'Discuss upcoming product redesign and timeline',
-    time: '10:00 AM',
-    duration: '1h',
-    priority: 'high',
-    category: 'meeting',
-    completed: false,
-    date: '2023-02-27'
-  },
-  {
-    id: '2',
-    title: 'Lunch with Sarah',
-    time: '12:00 PM',
-    priority: 'low',
-    category: 'personal',
-    completed: false,
-    date: '2023-02-27'
-  },
-  {
-    id: '3',
-    title: 'Complete quarterly report',
-    time: '2:30 PM',
-    duration: '30m',
-    priority: 'medium',
-    category: 'work',
-    completed: false,
-    date: '2023-02-27'
-  },
-  {
-    id: '4',
-    title: 'Gym workout',
-    time: '5:00 PM',
-    duration: '45m',
-    priority: 'medium',
-    category: 'health',
-    completed: false,
-    date: '2023-02-27'
-  },
-  {
-    id: '5',
-    title: 'Review marketing materials',
-    time: '11:00 AM',
-    duration: '2h',
-    priority: 'high',
-    category: 'work',
-    completed: true,
-    date: '2023-02-25'
-  },
-  {
-    id: '6',
-    title: 'Call with investors',
-    time: '3:00 PM',
-    duration: '1h',
-    priority: 'high',
-    category: 'meeting',
-    completed: true,
-    date: '2023-02-26'
-  }
-];
+import { useTasks } from '@/context/TaskContext';
 
 const completionStatus: CompletionStatus = {
   completed: 12,
@@ -106,7 +43,7 @@ const priorityStatus: PriorityStatus = {
 
 const Tasks = () => {
   const { toast } = useToast();
-  const [tasks, setTasks] = useState<Task[]>(mockTasks);
+  const { tasks, addTask, toggleTaskCompletion, deleteTask } = useTasks();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeStatus, setActiveStatus] = useState<'all' | 'pending' | 'completed'>('all');
   const [newTaskOpen, setNewTaskOpen] = useState(false);
@@ -121,35 +58,34 @@ const Tasks = () => {
   });
 
   const handleToggleComplete = (taskId: string) => {
-    setTasks(prevTasks => 
-      prevTasks.map(task => {
-        if (task.id === taskId) {
-          const newCompleted = !task.completed;
-          
-          // Show toast notification when task is completed
-          if (newCompleted) {
-            toast({
-              title: "Task completed",
-              description: `You've completed "${task.title}"!`,
-            });
-          }
-          
-          return { ...task, completed: newCompleted };
-        }
-        return task;
-      })
-    );
+    toggleTaskCompletion(taskId);
+    
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    
+    if (taskToUpdate) {
+      const newCompleted = !taskToUpdate.completed;
+      
+      // Show toast notification when task is completed
+      if (newCompleted) {
+        toast({
+          title: "Task completed",
+          description: `You've completed "${taskToUpdate.title}"!`,
+        });
+      }
+    }
   };
   
   const handleDeleteTask = (taskId: string) => {
     const taskToDelete = tasks.find(task => task.id === taskId);
     
-    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
-    
-    toast({
-      title: "Task deleted",
-      description: `"${taskToDelete?.title}" has been removed from your task list.`,
-    });
+    if (taskToDelete) {
+      deleteTask(taskId);
+      
+      toast({
+        title: "Task deleted",
+        description: `"${taskToDelete.title}" has been removed from your task list.`,
+      });
+    }
   };
 
   const handleNewTaskChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -171,8 +107,7 @@ const Tasks = () => {
       return;
     }
 
-    const task: Task = {
-      id: Date.now().toString(),
+    addTask({
       title: newTask.title,
       description: newTask.description,
       time: newTask.time || '12:00 PM',
@@ -181,9 +116,8 @@ const Tasks = () => {
       category: newTask.category as 'work' | 'personal' | 'meeting' | 'health',
       completed: false,
       date: newTask.date
-    };
+    });
 
-    setTasks(prev => [task, ...prev]);
     setNewTaskOpen(false);
     setNewTask({
       title: '',
@@ -197,7 +131,7 @@ const Tasks = () => {
 
     toast({
       title: "Task added",
-      description: `"${task.title}" has been added to your task list.`,
+      description: `"${newTask.title}" has been added to your task list.`,
     });
   };
 
@@ -211,6 +145,18 @@ const Tasks = () => {
     
     return true;
   });
+
+  // Calculate stats for the charts
+  const currentCompletionStatus = {
+    completed: tasks.filter(task => task.completed).length,
+    pending: tasks.filter(task => !task.completed).length
+  };
+
+  const currentPriorityStatus = {
+    high: tasks.filter(task => task.priority === 'high').length,
+    medium: tasks.filter(task => task.priority === 'medium').length,
+    low: tasks.filter(task => task.priority === 'low').length
+  };
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl animate-fade-in">
@@ -429,11 +375,11 @@ const Tasks = () => {
             <CardContent className="grid grid-cols-1 gap-6">
               <div>
                 <h4 className="text-sm font-medium mb-2">Completion Status</h4>
-                <DonutChart data={completionStatus} />
+                <DonutChart data={currentCompletionStatus} />
               </div>
               <div>
                 <h4 className="text-sm font-medium mb-2">Priority Distribution</h4>
-                <PriorityChart data={priorityStatus} />
+                <PriorityChart data={currentPriorityStatus} />
               </div>
             </CardContent>
           </Card>

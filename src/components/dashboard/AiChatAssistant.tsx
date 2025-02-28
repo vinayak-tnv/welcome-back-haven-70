@@ -81,6 +81,10 @@ const AiChatAssistant: React.FC = () => {
   const handleSendMessage = () => {
     if (!currentMessage.trim()) return;
     
+    // Check if the message is a thank you message
+    const thankYouRegex = /\b(thank\s?you|thanks)\b/i;
+    const isThankYou = thankYouRegex.test(currentMessage.toLowerCase());
+    
     // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -96,6 +100,28 @@ const AiChatAssistant: React.FC = () => {
     // Simulate AI response after a short delay
     setTimeout(() => {
       let aiResponse = '';
+      
+      // If the message is a thank you, provide a closing message and close the chat
+      if (isThankYou) {
+        aiResponse = "You're welcome! I'm glad I could help. Feel free to reach out again if you need any assistance with your planning. Have a great day!";
+        
+        // Add the AI response
+        const aiMessage: Message = {
+          id: Date.now().toString(),
+          text: aiResponse,
+          sender: 'ai',
+          timestamp: new Date(),
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+        
+        // Close the chat after a short delay
+        setTimeout(() => {
+          setIsOpen(false);
+        }, 2000);
+        
+        return;
+      }
       
       // Simple keyword matching for more contextual responses
       const userMessageLower = userMessage.text.toLowerCase();
