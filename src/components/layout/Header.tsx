@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Calendar, ListTodo, Bell, Settings, Search, Plus, User } from 'lucide-react';
+import { Calendar, ListTodo, Bell, Settings, Search, Plus, User, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -42,7 +42,7 @@ const Header = () => {
           <div className="flex items-center space-x-8">
             <div className="flex items-center">
               <Calendar className="h-5 w-5 mr-2" />
-              <h1 className="text-xl font-medium">Planify</h1>
+              <h1 className="text-xl font-medium">planify.</h1>
             </div>
             
             <nav className="hidden md:flex items-center space-x-4">
@@ -57,6 +57,12 @@ const Header = () => {
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/tasks') ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
               >
                 Tasks
+              </NavLink>
+              <NavLink
+                to="/focus"
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/focus') ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+              >
+                Focus
               </NavLink>
               <NavLink
                 to="/notifications"

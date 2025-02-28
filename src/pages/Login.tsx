@@ -55,7 +55,7 @@ const Login = () => {
         <div className="flex justify-center mb-8">
           <div className="flex items-center space-x-2 bg-white p-3 rounded-lg shadow-sm">
             <Calendar className="h-6 w-6 text-blue-600" />
-            <h1 className="text-2xl font-bold">Planify</h1>
+            <h1 className="text-2xl font-bold">planify.</h1>
           </div>
         </div>
         
@@ -132,7 +132,7 @@ const Login = () => {
         </Card>
         
         <p className="text-center text-xs text-gray-500 mt-8">
-          © {new Date().getFullYear()} Planify. All rights reserved.
+          © {new Date().getFullYear()} planify. All rights reserved.
         </p>
       </div>
     </div>

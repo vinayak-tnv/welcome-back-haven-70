@@ -12,6 +12,7 @@ import Layout from "@/components/layout/Layout";
 import Index from "@/pages/Index";
 import Login from "@/pages/Login";
 import Tasks from "@/pages/Tasks";
+import Focus from "@/pages/Focus";
 import Settings from "@/pages/Settings";
 import Notifications from "@/pages/Notifications";
 import NotFound from "@/pages/NotFound";
@@ -46,6 +47,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Tasks />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/focus" 
+        element={
+          <ProtectedRoute>
+            <Focus />
           </ProtectedRoute>
         } 
       />

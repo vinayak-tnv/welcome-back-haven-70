@@ -58,6 +58,31 @@ const AiChatAssistant: React.FC = () => {
     }
   }, [messages]);
 
+  // Load messages from localStorage on component mount
+  useEffect(() => {
+    const savedMessages = localStorage.getItem('aiChatMessages');
+    if (savedMessages) {
+      try {
+        const parsedMessages = JSON.parse(savedMessages);
+        // Convert string timestamps back to Date objects
+        const messagesWithDateObjects = parsedMessages.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }));
+        setMessages(messagesWithDateObjects);
+      } catch (error) {
+        console.error('Error parsing saved messages:', error);
+      }
+    }
+  }, []);
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem('aiChatMessages', JSON.stringify(messages));
+    }
+  }, [messages]);
+
   // Effect to show AI suggestions periodically
   useEffect(() => {
     // Only show suggestions if chat is open and not too frequently
@@ -139,13 +164,13 @@ const AiChatAssistant: React.FC = () => {
       } else if (userMessageLower.includes('template') || userMessageLower.includes('routine')) {
         aiResponse = "Based on your work patterns, an ideal weekly template would have Mondays and Tuesdays for deep work, Wednesdays for meetings, Thursdays for planning and reviews, and Fridays for creative and collaborative work.";
       } else {
-        // Default responses if no keywords match
+        // For any other message, generate a helpful response related to productivity and planning
         const aiResponses = [
-          "Based on your past productivity patterns, I recommend scheduling your most challenging tasks between 9-11 AM when your focus tends to be strongest.",
-          "Looking at your calendar, you have a 2-hour gap on Thursday afternoon that would be perfect for deep work on your priority project.",
-          "I've noticed you have multiple back-to-back meetings on Wednesday. Adding 10-minute breaks between them could improve your focus and decision-making quality.",
-          "Analyzing your task completion patterns, you finish work most efficiently in the mornings. Consider scheduling important tasks before noon.",
-          "Your current schedule shows some potential for time batching. Grouping similar tasks (like emails, calls, and meetings) can reduce context switching and boost productivity.",
+          `I understand you're asking about "${userMessage.text}". Based on your past productivity patterns, I recommend scheduling your most challenging tasks between 9-11 AM when your focus tends to be strongest.`,
+          `Regarding "${userMessage.text}", you might want to consider time-blocking this activity in your calendar to ensure you have dedicated time for it.`,
+          `That's an interesting query about "${userMessage.text}". Looking at your calendar, you have a 2-hour gap on Thursday afternoon that would be perfect for working on this.`,
+          `I see you're interested in "${userMessage.text}". Analyzing your task completion patterns, you finish work most efficiently in the mornings, so consider planning this activity before noon.`,
+          `About "${userMessage.text}" - your current schedule shows some potential for time batching similar activities, which can reduce context switching and boost your productivity.`,
         ];
         
         aiResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
