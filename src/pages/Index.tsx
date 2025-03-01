@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Card, 
@@ -18,12 +17,13 @@ import PriorityChart from '@/components/charts/PriorityChart';
 import WeatherWidget from '@/components/WeatherWidget';
 import LiveClock from '@/components/dashboard/LiveClock';
 import AiChatAssistant from '@/components/dashboard/AiChatAssistant';
+import SleepAnalysis from '@/components/dashboard/SleepAnalysis';
+import VoiceAssistant from '@/components/dashboard/VoiceAssistant';
 import { TimeSlot as TimeSlotType, WeatherData } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useTasks } from '@/context/TaskContext';
-import { format, addDays, subDays, parseISO } from 'date-fns';
+import { format, addDays, subDays, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isSameMonth, isToday, isSameDay } from 'date-fns';
 
-// Mock data
 const timeSlots: TimeSlotType[] = [
   { id: '1', time: '09:00' },
   { id: '2', time: '12:30' },
@@ -43,7 +43,6 @@ const weatherData: WeatherData = {
   ]
 };
 
-// Motivational quotes
 const motivationalQuotes = [
   { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
   { text: "It always seems impossible until it's done.", author: "Nelson Mandela" },
@@ -55,10 +54,11 @@ const motivationalQuotes = [
   { text: "You don't have to be great to start, but you have to start to be great.", author: "Zig Ziglar" }
 ];
 
-// Generate hours for daily planner (24h format)
+const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 const generateHours = () => {
   const hours = [];
-  for (let i = 0; i <= 23; i++) { // 0-23 hours
+  for (let i = 0; i <= 23; i++) {
     hours.push({
       label: `${i.toString().padStart(2, '0')}:00`,
       value: i,
@@ -67,8 +67,27 @@ const generateHours = () => {
   return hours;
 };
 
-// Days of the week for weekly view
-const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const generateMonthDays = (date: Date) => {
+  const monthStart = startOfMonth(date);
+  const monthEnd = endOfMonth(date);
+  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  
+  const startDay = monthStart.getDay();
+  const prevDaysNeeded = startDay;
+  const prevDays = [];
+  for (let i = prevDaysNeeded - 1; i >= 0; i--) {
+    prevDays.push(subDays(monthStart, i + 1));
+  }
+  
+  const lastDay = monthEnd.getDay();
+  const nextDaysNeeded = 6 - lastDay;
+  const nextDays = [];
+  for (let i = 1; i <= nextDaysNeeded; i++) {
+    nextDays.push(addDays(monthEnd, i));
+  }
+  
+  return [...prevDays, ...days, ...nextDays];
+};
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -78,8 +97,8 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('day');
   const hours = generateHours();
   const [quote, setQuote] = useState(motivationalQuotes[0]);
+  const monthDays = generateMonthDays(selectedDate);
 
-  // Change quote every 1 minute
   useEffect(() => {
     const randomIndex = Math.floor(Math.random() * motivationalQuotes.length);
     setQuote(motivationalQuotes[randomIndex]);
@@ -100,7 +119,6 @@ const Dashboard = () => {
     if (taskToUpdate) {
       const newCompleted = !taskToUpdate.completed;
       
-      // Show toast notification when task is completed
       if (newCompleted) {
         toast({
           title: "Task completed",
@@ -123,7 +141,6 @@ const Dashboard = () => {
     }
   };
 
-  // Calculate stats for the charts
   const completionStatus = {
     completed: tasks.filter(task => task.completed).length,
     pending: tasks.filter(task => !task.completed).length
@@ -138,11 +155,9 @@ const Dashboard = () => {
   const getTasksByHour = (hour: number) => {
     const tasksForDate = getTasksForDate(selectedDate);
     return tasksForDate.filter(task => {
-      // Parse the task time to get the hour (now in 24h format)
       const timeString = task.time;
       if (!timeString) return false;
       
-      // Parse time in 24h format
       const [hourValue, minutes] = timeString.split(':').map(Number);
       
       return hourValue === hour;
@@ -150,20 +165,16 @@ const Dashboard = () => {
   };
 
   const getTasksByDayOfWeek = (dayIndex: number) => {
-    // Get current date and determine the date for the given day index
     const currentDate = new Date(selectedDate);
-    const currentDayIndex = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const currentDayIndex = currentDate.getDay();
     
-    // Calculate the difference in days
     const diff = dayIndex - currentDayIndex;
     const targetDate = new Date(currentDate);
     targetDate.setDate(currentDate.getDate() + diff);
     
-    // Get tasks for the target date
     return getTasksForDate(targetDate);
   };
 
-  // Handlers for date navigation
   const goToPreviousDay = () => {
     setSelectedDate(prev => subDays(prev, 1));
   };
@@ -172,11 +183,18 @@ const Dashboard = () => {
     setSelectedDate(prev => addDays(prev, 1));
   };
 
+  const goToPreviousMonth = () => {
+    setSelectedDate(prev => subMonths(prev, 1));
+  };
+
+  const goToNextMonth = () => {
+    setSelectedDate(prev => addMonths(prev, 1));
+  };
+
   const goToToday = () => {
     setSelectedDate(new Date());
   };
 
-  // Get display dates for week view
   const getWeekDates = () => {
     const currentDate = new Date(selectedDate);
     const currentDayIndex = currentDate.getDay();
@@ -194,11 +212,8 @@ const Dashboard = () => {
     });
   };
 
-  const weekDates = getWeekDates();
-
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl">
-      {/* Welcome Banner */}
       {user && (
         <Card className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-none">
           <CardContent className="p-4 flex items-center justify-between">
@@ -216,7 +231,6 @@ const Dashboard = () => {
               </div>
             </div>
             
-            {/* Live Clock */}
             <div className="hidden md:block">
               <LiveClock />
             </div>
@@ -224,12 +238,10 @@ const Dashboard = () => {
         </Card>
       )}
       
-      {/* Mobile Clock - Only visible on mobile */}
       <div className="md:hidden mb-6">
         <LiveClock />
       </div>
       
-      {/* Quote of the day */}
       <Card className="mb-6 bg-gray-50 border-none">
         <CardContent className="p-4 flex items-start">
           <Quote className="h-6 w-6 text-blue-500 mr-4 flex-shrink-0 mt-1" />
@@ -240,7 +252,6 @@ const Dashboard = () => {
         </CardContent>
       </Card>
       
-      {/* AI Suggestions */}
       <Card className="mb-8 bg-white">
         <CardHeader className="pb-3">
           <div className="flex items-center">
@@ -264,9 +275,7 @@ const Dashboard = () => {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Tasks and Calendar Column */}
         <div className="lg:col-span-2 space-y-8">
-          {/* Calendar and Tabs */}
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -274,16 +283,18 @@ const Dashboard = () => {
                   <div className="flex items-center space-x-4">
                     <button 
                       className="p-1 rounded-full hover:bg-gray-100"
-                      onClick={goToPreviousDay}
+                      onClick={activeTab === 'month' ? goToPreviousMonth : goToPreviousDay}
                     >
                       <ChevronLeft className="h-5 w-5 text-gray-500" />
                     </button>
                     <h3 className="text-lg font-medium">
-                      {format(selectedDate, 'MMMM d, yyyy')}
+                      {activeTab === 'month' 
+                        ? format(selectedDate, 'MMMM yyyy')
+                        : format(selectedDate, 'MMMM d, yyyy')}
                     </h3>
                     <button 
                       className="p-1 rounded-full hover:bg-gray-100"
-                      onClick={goToNextDay}
+                      onClick={activeTab === 'month' ? goToNextMonth : goToNextDay}
                     >
                       <ChevronRight className="h-5 w-5 text-gray-500" />
                     </button>
@@ -301,12 +312,12 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="day" onValueChange={setActiveTab} className="mb-8">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="day">Day</TabsTrigger>
                   <TabsTrigger value="week">Week</TabsTrigger>
+                  <TabsTrigger value="month">Month</TabsTrigger>
                 </TabsList>
                 
-                {/* Day View with Scroll Area */}
                 <TabsContent value="day" className="mt-4">
                   <ScrollArea className="h-[400px] pr-4">
                     <div className="space-y-1">
@@ -359,7 +370,6 @@ const Dashboard = () => {
                   </ScrollArea>
                 </TabsContent>
                 
-                {/* Week View with Scroll Area */}
                 <TabsContent value="week" className="mt-4">
                   <ScrollArea className="h-[400px]">
                     <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-md overflow-hidden">
@@ -407,11 +417,75 @@ const Dashboard = () => {
                     </div>
                   </ScrollArea>
                 </TabsContent>
+                
+                <TabsContent value="month" className="mt-4">
+                  <div className="grid grid-cols-7 gap-1 text-center mb-2">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                      <div key={day} className="text-xs font-medium text-gray-500 py-1">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+                  <ScrollArea className="h-[360px]">
+                    <div className="grid grid-cols-7 gap-1">
+                      {monthDays.map((day, index) => {
+                        const dayTasks = getTasksForDate(day);
+                        const isCurrentMonth = isSameMonth(day, selectedDate);
+                        const isWeekendDay = isWeekend(day);
+                        return (
+                          <div 
+                            key={index}
+                            onClick={() => setSelectedDate(day)}
+                            className={`
+                              min-h-[80px] p-1 rounded-md border cursor-pointer 
+                              ${isSameDay(day, selectedDate) ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
+                              ${!isCurrentMonth ? 'opacity-40' : ''}
+                              ${isWeekendDay ? 'bg-amber-50' : ''}
+                              ${isToday(day) ? 'font-bold' : ''}
+                              hover:bg-gray-50
+                            `}
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className={`text-xs ${isToday(day) ? 'bg-blue-600 text-white h-5 w-5 rounded-full flex items-center justify-center' : ''}`}>
+                                {format(day, 'd')}
+                              </span>
+                              {dayTasks.length > 0 && (
+                                <span className="text-xs bg-blue-100 text-blue-800 px-1 rounded-full">
+                                  {dayTasks.length}
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-1 space-y-1">
+                              {dayTasks.slice(0, 2).map((task) => (
+                                <div 
+                                  key={task.id} 
+                                  className={`
+                                    text-xs truncate px-1 py-0.5 rounded
+                                    ${task.priority === 'high' ? 'bg-red-100 text-red-800' : 
+                                      task.priority === 'medium' ? 'bg-amber-100 text-amber-800' : 
+                                      'bg-green-100 text-green-800'}
+                                    ${task.completed ? 'line-through opacity-50' : ''}
+                                  `}
+                                >
+                                  {task.title}
+                                </div>
+                              ))}
+                              {dayTasks.length > 2 && (
+                                <div className="text-xs text-gray-500 px-1">
+                                  +{dayTasks.length - 2} more
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
               </Tabs>
             </CardContent>
           </Card>
 
-          {/* Today's Tasks */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -446,9 +520,9 @@ const Dashboard = () => {
           </Card>
         </div>
 
-        {/* Stats and Weather Column */}
         <div className="space-y-8">
-          {/* Task Progress */}
+          <SleepAnalysis />
+
           <Card>
             <CardHeader>
               <CardTitle className="text-lg font-medium">Task Progress</CardTitle>
@@ -465,13 +539,13 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Weather Widget */}
           <WeatherWidget weatherData={weatherData} />
         </div>
       </div>
 
-      {/* AI Chat Assistant */}
       <AiChatAssistant />
+      
+      <VoiceAssistant />
     </div>
   );
 };

@@ -68,3 +68,15 @@ export interface WeatherForecast {
   condition: string;
   temp: number;
 }
+
+// Helper function to generate hours in 24h format
+export const generateHours = () => {
+  const hours = [];
+  for (let i = 0; i <= 23; i++) { // 0-23 hours
+    hours.push({
+      label: `${i.toString().padStart(2, '0')}:00`,
+      value: i,
+    });
+  }
+  return hours;
+};

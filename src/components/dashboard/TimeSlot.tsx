@@ -39,6 +39,7 @@ const TimeSlot: React.FC<TimeSlotProps> = ({ slot, date = new Date() }) => {
     return `${hours}:${minutes}`;
   };
 
+  // Display time in 24h format
   const time24h = formatTo24h(slot.time);
 
   return (
