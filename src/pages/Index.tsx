@@ -8,6 +8,7 @@ import {
   CardTitle 
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sparkles, ChevronLeft, ChevronRight, User, Quote, CalendarDays } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import TimeSlot from '@/components/dashboard/TimeSlot';
@@ -305,102 +306,106 @@ const Dashboard = () => {
                   <TabsTrigger value="week">Week</TabsTrigger>
                 </TabsList>
                 
-                {/* Day View */}
+                {/* Day View with Scroll Area */}
                 <TabsContent value="day" className="mt-4">
-                  <div className="space-y-1">
-                    {hours.map((hour) => {
-                      const hourTasks = getTasksByHour(hour.value);
-                      return (
-                        <div key={hour.value} className="grid grid-cols-12 py-2 text-sm group hover:bg-gray-50 rounded-md">
-                          <div className="col-span-2 text-right pr-4 text-gray-500">
-                            {hour.label}
-                          </div>
-                          <div className="col-span-10 border-l pl-4 min-h-16">
-                            {hourTasks.length > 0 ? (
-                              <div className="space-y-2 py-1">
-                                {hourTasks.map(task => (
-                                  <div 
-                                    key={task.id} 
-                                    className={`p-2 rounded-md border-l-4 ${task.priority === 'high' ? 'border-red-500 bg-red-50' : task.priority === 'medium' ? 'border-amber-500 bg-amber-50' : 'border-green-500 bg-green-50'}`}
-                                  >
-                                    <div className="flex items-start">
-                                      <div className="flex-1">
-                                        <div className="flex items-center">
-                                          <h4 className={`font-medium text-sm ${task.completed ? 'line-through text-gray-500' : ''}`}>
-                                            {task.title}
-                                          </h4>
-                                        </div>
-                                        <div className="flex items-center mt-1 text-xs text-gray-500">
-                                          <span>{task.time}</span>
-                                          {task.duration && <span className="ml-1">• {task.duration}</span>}
-                                          <span className="ml-2 capitalize">{task.category}</span>
-                                          {task.recurrence && (
-                                            <span className="ml-2 flex items-center">
-                                              <CalendarDays className="h-3 w-3 mr-1" />
-                                              {task.recurrence.type === 'daily' ? 'Daily' : 
-                                               task.recurrence.type === 'weekly' ? 'Weekly' : 
-                                               task.recurrence.type === 'monthly' ? 'Monthly' : 'Recurring'}
-                                            </span>
-                                          )}
+                  <ScrollArea className="h-[400px] pr-4">
+                    <div className="space-y-1">
+                      {hours.map((hour) => {
+                        const hourTasks = getTasksByHour(hour.value);
+                        return (
+                          <div key={hour.value} className="grid grid-cols-12 py-2 text-sm group hover:bg-gray-50 rounded-md">
+                            <div className="col-span-2 text-right pr-4 text-gray-500">
+                              {hour.label}
+                            </div>
+                            <div className="col-span-10 border-l pl-4 min-h-16">
+                              {hourTasks.length > 0 ? (
+                                <div className="space-y-2 py-1">
+                                  {hourTasks.map(task => (
+                                    <div 
+                                      key={task.id} 
+                                      className={`p-2 rounded-md border-l-4 ${task.priority === 'high' ? 'border-red-500 bg-red-50' : task.priority === 'medium' ? 'border-amber-500 bg-amber-50' : 'border-green-500 bg-green-50'}`}
+                                    >
+                                      <div className="flex items-start">
+                                        <div className="flex-1">
+                                          <div className="flex items-center">
+                                            <h4 className={`font-medium text-sm ${task.completed ? 'line-through text-gray-500' : ''}`}>
+                                              {task.title}
+                                            </h4>
+                                          </div>
+                                          <div className="flex items-center mt-1 text-xs text-gray-500">
+                                            <span>{task.time}</span>
+                                            {task.duration && <span className="ml-1">• {task.duration}</span>}
+                                            <span className="ml-2 capitalize">{task.category}</span>
+                                            {task.recurrence && (
+                                              <span className="ml-2 flex items-center">
+                                                <CalendarDays className="h-3 w-3 mr-1" />
+                                                {task.recurrence.type === 'daily' ? 'Daily' : 
+                                                 task.recurrence.type === 'weekly' ? 'Weekly' : 
+                                                 task.recurrence.type === 'monthly' ? 'Monthly' : 'Recurring'}
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : null}
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
                 </TabsContent>
                 
-                {/* Week View */}
+                {/* Week View with Scroll Area */}
                 <TabsContent value="week" className="mt-4">
-                  <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-md overflow-hidden">
-                    {weekDates.map((dayInfo, index) => {
-                      const dayTasks = getTasksByDayOfWeek(index);
-                      return (
-                        <div 
-                          key={dayInfo.day} 
-                          className={`bg-white ${dayInfo.isWeekend ? 'bg-gray-50' : ''}`}
-                        >
-                          <div className={`py-2 text-center border-b ${dayInfo.isWeekend ? 'bg-blue-50' : ''}`}>
-                            <p className={`text-sm font-medium ${dayInfo.isWeekend ? 'text-blue-600' : ''}`}>
-                              {dayInfo.day}
-                            </p>
-                            <p className="text-xs text-gray-500">{dayInfo.formattedDate}</p>
-                          </div>
-                          <div className="min-h-[150px] p-1">
-                            {dayTasks.length > 0 ? (
-                              dayTasks.map(task => (
-                                <div 
-                                  key={task.id} 
-                                  className={`p-1 my-1 text-xs rounded border-l-2 ${task.priority === 'high' ? 'border-red-500 bg-red-50' : task.priority === 'medium' ? 'border-amber-500 bg-amber-50' : 'border-green-500 bg-green-50'}`}
-                                >
-                                  <p className={`truncate font-medium ${task.completed ? 'line-through text-gray-500' : ''}`}>
-                                    {task.title}
-                                  </p>
-                                  <p className="text-xs text-gray-500">{task.time}</p>
-                                  {task.recurrence && (
-                                    <p className="text-xs text-gray-500 flex items-center">
-                                      <CalendarDays className="h-3 w-3 mr-1" />
-                                      {task.recurrence.type.charAt(0).toUpperCase()}
+                  <ScrollArea className="h-[400px]">
+                    <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-md overflow-hidden">
+                      {weekDates.map((dayInfo, index) => {
+                        const dayTasks = getTasksByDayOfWeek(index);
+                        return (
+                          <div 
+                            key={dayInfo.day} 
+                            className={`bg-white ${dayInfo.isWeekend ? 'bg-gray-50' : ''}`}
+                          >
+                            <div className={`py-2 text-center border-b ${dayInfo.isWeekend ? 'bg-blue-50' : ''}`}>
+                              <p className={`text-sm font-medium ${dayInfo.isWeekend ? 'text-blue-600' : ''}`}>
+                                {dayInfo.day}
+                              </p>
+                              <p className="text-xs text-gray-500">{dayInfo.formattedDate}</p>
+                            </div>
+                            <div className="min-h-[350px] p-1">
+                              {dayTasks.length > 0 ? (
+                                dayTasks.map(task => (
+                                  <div 
+                                    key={task.id} 
+                                    className={`p-1 my-1 text-xs rounded border-l-2 ${task.priority === 'high' ? 'border-red-500 bg-red-50' : task.priority === 'medium' ? 'border-amber-500 bg-amber-50' : 'border-green-500 bg-green-50'}`}
+                                  >
+                                    <p className={`truncate font-medium ${task.completed ? 'line-through text-gray-500' : ''}`}>
+                                      {task.title}
                                     </p>
-                                  )}
+                                    <p className="text-xs text-gray-500">{task.time}</p>
+                                    {task.recurrence && (
+                                      <p className="text-xs text-gray-500 flex items-center">
+                                        <CalendarDays className="h-3 w-3 mr-1" />
+                                        {task.recurrence.type.charAt(0).toUpperCase()}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="flex items-center justify-center h-full">
+                                  <p className="text-xs text-gray-400">No tasks</p>
                                 </div>
-                              ))
-                            ) : (
-                              <div className="flex items-center justify-center h-full">
-                                <p className="text-xs text-gray-400">No tasks</p>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
                 </TabsContent>
               </Tabs>
             </CardContent>
