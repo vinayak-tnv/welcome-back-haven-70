@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Card, 
@@ -211,6 +212,9 @@ const Dashboard = () => {
       };
     });
   };
+
+  // Define weekDates before using it
+  const weekDates = getWeekDates();
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl">
