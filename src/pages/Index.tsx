@@ -8,7 +8,7 @@ import {
   CardTitle 
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles, ChevronLeft, ChevronRight, User, Quote } from 'lucide-react';
+import { Sparkles, ChevronLeft, ChevronRight, User, Quote, CalendarDays } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import TimeSlot from '@/components/dashboard/TimeSlot';
 import TaskCard from '@/components/dashboard/TaskCard';
@@ -20,12 +20,13 @@ import AiChatAssistant from '@/components/dashboard/AiChatAssistant';
 import { TimeSlot as TimeSlotType, WeatherData } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useTasks } from '@/context/TaskContext';
+import { format, addDays, subDays, parseISO } from 'date-fns';
 
 // Mock data
 const timeSlots: TimeSlotType[] = [
-  { id: '1', time: '9:00 AM' },
-  { id: '2', time: '12:30 PM' },
-  { id: '3', time: '3:00 PM' },
+  { id: '1', time: '09:00' },
+  { id: '2', time: '12:30' },
+  { id: '3', time: '15:00' },
 ];
 
 const weatherData: WeatherData = {
@@ -53,14 +54,12 @@ const motivationalQuotes = [
   { text: "You don't have to be great to start, but you have to start to be great.", author: "Zig Ziglar" }
 ];
 
-// Generate hours for daily planner
+// Generate hours for daily planner (24h format)
 const generateHours = () => {
   const hours = [];
-  for (let i = 8; i <= 20; i++) { // 8 AM to 8 PM
-    const hour = i > 12 ? i - 12 : i;
-    const period = i >= 12 ? 'PM' : 'AM';
+  for (let i = 0; i <= 23; i++) { // 0-23 hours
     hours.push({
-      label: `${hour}:00 ${period}`,
+      label: `${i.toString().padStart(2, '0')}:00`,
       value: i,
     });
   }
@@ -73,7 +72,7 @@ const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Fri
 const Dashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { tasks, toggleTaskCompletion, deleteTask } = useTasks();
+  const { tasks, toggleTaskCompletion, deleteTask, getTasksForDate, isWeekend } = useTasks();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState('day');
   const hours = generateHours();
@@ -136,20 +135,14 @@ const Dashboard = () => {
   };
 
   const getTasksByHour = (hour: number) => {
-    return tasks.filter(task => {
-      // Parse the task time to get the hour
+    const tasksForDate = getTasksForDate(selectedDate);
+    return tasksForDate.filter(task => {
+      // Parse the task time to get the hour (now in 24h format)
       const timeString = task.time;
       if (!timeString) return false;
       
-      const [time, modifier] = timeString.split(' ');
-      let [taskHour, minutes] = time.split(':');
-      let hourValue = parseInt(taskHour);
-      
-      if (modifier === 'PM' && hourValue < 12) {
-        hourValue += 12;
-      } else if (modifier === 'AM' && hourValue === 12) {
-        hourValue = 0;
-      }
+      // Parse time in 24h format
+      const [hourValue, minutes] = timeString.split(':').map(Number);
       
       return hourValue === hour;
     });
@@ -157,20 +150,50 @@ const Dashboard = () => {
 
   const getTasksByDayOfWeek = (dayIndex: number) => {
     // Get current date and determine the date for the given day index
-    const today = new Date();
-    const currentDayIndex = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const currentDate = new Date(selectedDate);
+    const currentDayIndex = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
     
     // Calculate the difference in days
     const diff = dayIndex - currentDayIndex;
-    const targetDate = new Date(today);
-    targetDate.setDate(today.getDate() + diff);
+    const targetDate = new Date(currentDate);
+    targetDate.setDate(currentDate.getDate() + diff);
     
-    // Format the target date as 'YYYY-MM-DD' to match task.date format
-    const formattedDate = targetDate.toISOString().split('T')[0];
-    
-    // Filter tasks for the target date
-    return tasks.filter(task => task.date === formattedDate);
+    // Get tasks for the target date
+    return getTasksForDate(targetDate);
   };
+
+  // Handlers for date navigation
+  const goToPreviousDay = () => {
+    setSelectedDate(prev => subDays(prev, 1));
+  };
+
+  const goToNextDay = () => {
+    setSelectedDate(prev => addDays(prev, 1));
+  };
+
+  const goToToday = () => {
+    setSelectedDate(new Date());
+  };
+
+  // Get display dates for week view
+  const getWeekDates = () => {
+    const currentDate = new Date(selectedDate);
+    const currentDayIndex = currentDate.getDay();
+    
+    return daysOfWeek.map((day, index) => {
+      const diff = index - currentDayIndex;
+      const date = new Date(currentDate);
+      date.setDate(currentDate.getDate() + diff);
+      return {
+        day: day.substring(0, 3),
+        date: date,
+        formattedDate: format(date, 'd'),
+        isWeekend: isWeekend(date)
+      };
+    });
+  };
+
+  const weekDates = getWeekDates();
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl">
@@ -248,19 +271,28 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center space-x-4">
-                    <button className="p-1 rounded-full hover:bg-gray-100">
+                    <button 
+                      className="p-1 rounded-full hover:bg-gray-100"
+                      onClick={goToPreviousDay}
+                    >
                       <ChevronLeft className="h-5 w-5 text-gray-500" />
                     </button>
                     <h3 className="text-lg font-medium">
-                      February 27, 2023
+                      {format(selectedDate, 'MMMM d, yyyy')}
                     </h3>
-                    <button className="p-1 rounded-full hover:bg-gray-100">
+                    <button 
+                      className="p-1 rounded-full hover:bg-gray-100"
+                      onClick={goToNextDay}
+                    >
                       <ChevronRight className="h-5 w-5 text-gray-500" />
                     </button>
                   </div>
                 </div>
                 <div className="flex items-center">
-                  <button className="text-sm text-gray-500 hover:text-gray-900">
+                  <button 
+                    className="text-sm text-gray-500 hover:text-gray-900"
+                    onClick={goToToday}
+                  >
                     Today
                   </button>
                 </div>
@@ -302,6 +334,14 @@ const Dashboard = () => {
                                           <span>{task.time}</span>
                                           {task.duration && <span className="ml-1">• {task.duration}</span>}
                                           <span className="ml-2 capitalize">{task.category}</span>
+                                          {task.recurrence && (
+                                            <span className="ml-2 flex items-center">
+                                              <CalendarDays className="h-3 w-3 mr-1" />
+                                              {task.recurrence.type === 'daily' ? 'Daily' : 
+                                               task.recurrence.type === 'weekly' ? 'Weekly' : 
+                                               task.recurrence.type === 'monthly' ? 'Monthly' : 'Recurring'}
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
                                     </div>
@@ -319,13 +359,18 @@ const Dashboard = () => {
                 {/* Week View */}
                 <TabsContent value="week" className="mt-4">
                   <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-md overflow-hidden">
-                    {daysOfWeek.map((day, index) => {
+                    {weekDates.map((dayInfo, index) => {
                       const dayTasks = getTasksByDayOfWeek(index);
                       return (
-                        <div key={day} className="bg-white">
-                          <div className="py-2 text-center border-b">
-                            <p className="text-sm font-medium">{day.substring(0, 3)}</p>
-                            <p className="text-xs text-gray-500">Feb {20 + index}</p>
+                        <div 
+                          key={dayInfo.day} 
+                          className={`bg-white ${dayInfo.isWeekend ? 'bg-gray-50' : ''}`}
+                        >
+                          <div className={`py-2 text-center border-b ${dayInfo.isWeekend ? 'bg-blue-50' : ''}`}>
+                            <p className={`text-sm font-medium ${dayInfo.isWeekend ? 'text-blue-600' : ''}`}>
+                              {dayInfo.day}
+                            </p>
+                            <p className="text-xs text-gray-500">{dayInfo.formattedDate}</p>
                           </div>
                           <div className="min-h-[150px] p-1">
                             {dayTasks.length > 0 ? (
@@ -338,6 +383,12 @@ const Dashboard = () => {
                                     {task.title}
                                   </p>
                                   <p className="text-xs text-gray-500">{task.time}</p>
+                                  {task.recurrence && (
+                                    <p className="text-xs text-gray-500 flex items-center">
+                                      <CalendarDays className="h-3 w-3 mr-1" />
+                                      {task.recurrence.type.charAt(0).toUpperCase()}
+                                    </p>
+                                  )}
                                 </div>
                               ))
                             ) : (
@@ -359,7 +410,11 @@ const Dashboard = () => {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg font-medium">Today's Tasks</CardTitle>
+                <CardTitle className="text-lg font-medium">
+                  {format(selectedDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') 
+                    ? "Today's Tasks" 
+                    : `Tasks for ${format(selectedDate, 'MMMM d')}`}
+                </CardTitle>
                 <button className="text-xs text-gray-500 flex items-center">
                   Hide Completed
                 </button>
@@ -367,8 +422,8 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-1">
-                {tasks.length > 0 ? (
-                  tasks.map(task => (
+                {getTasksForDate(selectedDate).length > 0 ? (
+                  getTasksForDate(selectedDate).map(task => (
                     <TaskCard
                       key={task.id}
                       task={task}
@@ -378,7 +433,7 @@ const Dashboard = () => {
                   ))
                 ) : (
                   <div className="text-center py-8 text-gray-500">
-                    <p>No tasks for today. Add tasks from the Tasks page.</p>
+                    <p>No tasks for this day. Add tasks from the Tasks page.</p>
                   </div>
                 )}
               </div>

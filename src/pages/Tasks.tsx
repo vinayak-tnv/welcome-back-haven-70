@@ -11,11 +11,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Filter, ArrowUpDown, Clock, X } from 'lucide-react';
+import { Plus, Search, Filter, ArrowUpDown, Clock, X, Calendar } from 'lucide-react';
 import TaskCard from '@/components/dashboard/TaskCard';
 import DonutChart from '@/components/charts/DonutChart';
 import PriorityChart from '@/components/charts/PriorityChart';
-import { CompletionStatus, PriorityStatus } from '@/types';
+import { CompletionStatus, PriorityStatus, RecurrencePattern } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import AiChatSuggestions from '@/components/dashboard/AiChatSuggestions';
 import {
@@ -29,17 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { useTasks } from '@/context/TaskContext';
-
-const completionStatus: CompletionStatus = {
-  completed: 12,
-  pending: 8
-};
-
-const priorityStatus: PriorityStatus = {
-  high: 7,
-  medium: 8,
-  low: 5
-};
+import { Checkbox } from '@/components/ui/checkbox';
 
 const Tasks = () => {
   const { toast } = useToast();
@@ -54,8 +44,55 @@ const Tasks = () => {
     duration: '',
     priority: 'medium',
     category: 'work',
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
+    recurrence: {
+      enabled: false,
+      type: 'none',
+      interval: 1,
+      endDate: '',
+      daysOfWeek: []
+    }
   });
+
+  // Convert 12h time format to 24h
+  const formatTo24h = (timeString: string): string => {
+    if (!timeString) return '';
+    if (!timeString.includes('AM') && !timeString.includes('PM')) {
+      return timeString; // Already in 24h format or incorrect format
+    }
+    
+    const [time, modifier] = timeString.split(' ');
+    let [hours, minutes] = time.split(':');
+    
+    if (hours === '12') {
+      hours = modifier === 'AM' ? '00' : '12';
+    } else if (modifier === 'PM') {
+      hours = String(parseInt(hours, 10) + 12);
+    }
+    
+    return `${hours.padStart(2, '0')}:${minutes}`;
+  };
+
+  // Convert 24h time format to 12h
+  const formatTo12h = (timeString: string): string => {
+    if (!timeString) return '';
+    if (timeString.includes('AM') || timeString.includes('PM')) {
+      return timeString; // Already in 12h format
+    }
+    
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours, 10);
+    
+    if (hour === 0) {
+      return `12:${minutes} AM`;
+    } else if (hour < 12) {
+      return `${hour}:${minutes} AM`;
+    } else if (hour === 12) {
+      return `12:${minutes} PM`;
+    } else {
+      return `${hour - 12}:${minutes} PM`;
+    }
+  };
 
   const handleToggleComplete = (taskId: string) => {
     toggleTaskCompletion(taskId);
@@ -97,6 +134,39 @@ const Tasks = () => {
     setNewTask(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleRecurrenceChange = (field: string, value: any) => {
+    setNewTask(prev => ({
+      ...prev,
+      recurrence: {
+        ...prev.recurrence,
+        [field]: value
+      }
+    }));
+  };
+
+  const handleDayOfWeekToggle = (day: number) => {
+    setNewTask(prev => {
+      const daysOfWeek = [...(prev.recurrence.daysOfWeek || [])];
+      
+      if (daysOfWeek.includes(day)) {
+        // Remove day if already selected
+        const index = daysOfWeek.indexOf(day);
+        daysOfWeek.splice(index, 1);
+      } else {
+        // Add day if not selected
+        daysOfWeek.push(day);
+      }
+      
+      return {
+        ...prev,
+        recurrence: {
+          ...prev.recurrence,
+          daysOfWeek
+        }
+      };
+    });
+  };
+
   const handleAddTask = () => {
     if (!newTask.title.trim()) {
       toast({
@@ -107,15 +177,37 @@ const Tasks = () => {
       return;
     }
 
+    // Format time to 24-hour format
+    const time24h = formatTo24h(newTask.time || '12:00 PM');
+
+    // Prepare recurrence object
+    let recurrence: RecurrencePattern | undefined = undefined;
+    
+    if (newTask.recurrence.enabled && newTask.recurrence.type !== 'none') {
+      recurrence = {
+        type: newTask.recurrence.type as 'daily' | 'weekly' | 'monthly' | 'custom',
+        interval: newTask.recurrence.interval
+      };
+      
+      if (newTask.recurrence.endDate) {
+        recurrence.endDate = newTask.recurrence.endDate;
+      }
+      
+      if (newTask.recurrence.type === 'weekly' && newTask.recurrence.daysOfWeek.length > 0) {
+        recurrence.daysOfWeek = newTask.recurrence.daysOfWeek;
+      }
+    }
+
     addTask({
       title: newTask.title,
       description: newTask.description,
-      time: newTask.time || '12:00 PM',
+      time: time24h,
       duration: newTask.duration,
       priority: newTask.priority as 'high' | 'medium' | 'low',
       category: newTask.category as 'work' | 'personal' | 'meeting' | 'health',
       completed: false,
-      date: newTask.date
+      date: newTask.date,
+      recurrence
     });
 
     setNewTaskOpen(false);
@@ -126,7 +218,14 @@ const Tasks = () => {
       duration: '',
       priority: 'medium',
       category: 'work',
-      date: new Date().toISOString().split('T')[0]
+      date: new Date().toISOString().split('T')[0],
+      recurrence: {
+        enabled: false,
+        type: 'none',
+        interval: 1,
+        endDate: '',
+        daysOfWeek: []
+      }
     });
 
     toast({
@@ -157,6 +256,17 @@ const Tasks = () => {
     medium: tasks.filter(task => task.priority === 'medium').length,
     low: tasks.filter(task => task.priority === 'low').length
   };
+
+  // Days of week for recurrence selector
+  const daysOfWeek = [
+    { value: 0, label: 'Sun' },
+    { value: 1, label: 'Mon' },
+    { value: 2, label: 'Tue' },
+    { value: 3, label: 'Wed' },
+    { value: 4, label: 'Thu' },
+    { value: 5, label: 'Fri' },
+    { value: 6, label: 'Sat' }
+  ];
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl animate-fade-in">
@@ -196,7 +306,7 @@ const Tasks = () => {
                     New Task
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px]">
+                <DialogContent className="sm:max-w-[525px]">
                   <DialogHeader>
                     <DialogTitle>Create New Task</DialogTitle>
                     <DialogDescription>
@@ -226,11 +336,12 @@ const Tasks = () => {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="time">Time</Label>
+                        <Label htmlFor="time">Time (24h format)</Label>
                         <Input
                           id="time"
                           name="time"
-                          placeholder="12:00 PM"
+                          type="time"
+                          placeholder="14:00"
                           value={newTask.time}
                           onChange={handleNewTaskChange}
                         />
@@ -290,6 +401,100 @@ const Tasks = () => {
                         value={newTask.date}
                         onChange={handleNewTaskChange}
                       />
+                    </div>
+                    
+                    {/* Recurrence Section */}
+                    <div className="space-y-4 border-t pt-4">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="recurrence" 
+                          checked={newTask.recurrence.enabled}
+                          onCheckedChange={(checked) => 
+                            handleRecurrenceChange('enabled', checked === true)
+                          }
+                        />
+                        <Label htmlFor="recurrence" className="font-medium flex items-center">
+                          <Calendar className="h-4 w-4 mr-2" />
+                          Make this a recurring task
+                        </Label>
+                      </div>
+                      
+                      {newTask.recurrence.enabled && (
+                        <div className="space-y-4 pl-6">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="recurrenceType">Recurrence Type</Label>
+                              <Select
+                                value={newTask.recurrence.type}
+                                onValueChange={(value) => handleRecurrenceChange('type', value)}
+                              >
+                                <SelectTrigger id="recurrenceType">
+                                  <SelectValue placeholder="Select type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">None</SelectItem>
+                                  <SelectItem value="daily">Daily</SelectItem>
+                                  <SelectItem value="weekly">Weekly</SelectItem>
+                                  <SelectItem value="monthly">Monthly</SelectItem>
+                                  <SelectItem value="custom">Custom</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label htmlFor="interval">Interval</Label>
+                              <div className="flex items-center space-x-2">
+                                <Input
+                                  id="interval"
+                                  type="number"
+                                  min="1"
+                                  placeholder="1"
+                                  value={newTask.recurrence.interval}
+                                  onChange={(e) => 
+                                    handleRecurrenceChange('interval', parseInt(e.target.value) || 1)
+                                  }
+                                  className="w-full"
+                                />
+                                <span className="text-sm text-gray-500 whitespace-nowrap">
+                                  {newTask.recurrence.type === 'daily' ? 'day(s)' : 
+                                   newTask.recurrence.type === 'weekly' ? 'week(s)' : 
+                                   newTask.recurrence.type === 'monthly' ? 'month(s)' : 'interval'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {newTask.recurrence.type === 'weekly' && (
+                            <div className="space-y-2">
+                              <Label>Days of Week</Label>
+                              <div className="flex flex-wrap gap-2">
+                                {daysOfWeek.map(day => (
+                                  <Button
+                                    key={day.value}
+                                    type="button"
+                                    variant={newTask.recurrence.daysOfWeek.includes(day.value) ? 'default' : 'outline'}
+                                    className="min-w-[45px] py-1 px-2"
+                                    onClick={() => handleDayOfWeekToggle(day.value)}
+                                  >
+                                    {day.label}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="endDate">End Date (Optional)</Label>
+                            <Input
+                              id="endDate"
+                              type="date"
+                              value={newTask.recurrence.endDate}
+                              onChange={(e) => handleRecurrenceChange('endDate', e.target.value)}
+                              min={newTask.date}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <DialogFooter>

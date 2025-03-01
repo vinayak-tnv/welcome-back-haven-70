@@ -6,6 +6,14 @@ export interface User {
   avatar?: string;
 }
 
+export interface RecurrencePattern {
+  type: 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
+  interval?: number;
+  endDate?: string;
+  daysOfWeek?: number[]; // 0 = Sunday, 1 = Monday, etc.
+  custom?: string; // For custom recurrence patterns
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -16,6 +24,7 @@ export interface Task {
   category?: 'work' | 'personal' | 'meeting' | 'health';
   completed: boolean;
   date: string;
+  recurrence?: RecurrencePattern;
 }
 
 export interface TimeSlot {
