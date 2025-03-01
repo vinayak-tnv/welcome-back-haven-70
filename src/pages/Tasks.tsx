@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -11,11 +10,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Plus, Search, Filter, ArrowUpDown, Clock, X, Calendar } from 'lucide-react';
 import TaskCard from '@/components/dashboard/TaskCard';
 import DonutChart from '@/components/charts/DonutChart';
 import PriorityChart from '@/components/charts/PriorityChart';
-import { CompletionStatus, PriorityStatus, RecurrencePattern } from '@/types';
+import { CompletionStatus, PriorityStatus, RecurrencePattern, WeekendPreference, SleepSchedule } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import AiChatSuggestions from '@/components/dashboard/AiChatSuggestions';
 import {
@@ -30,6 +30,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { useTasks } from '@/context/TaskContext';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const Tasks = () => {
   const { toast } = useToast();
@@ -54,11 +55,10 @@ const Tasks = () => {
     }
   });
 
-  // Convert 12h time format to 24h
   const formatTo24h = (timeString: string): string => {
     if (!timeString) return '';
     if (!timeString.includes('AM') && !timeString.includes('PM')) {
-      return timeString; // Already in 24h format or incorrect format
+      return timeString;
     }
     
     const [time, modifier] = timeString.split(' ');
@@ -73,11 +73,10 @@ const Tasks = () => {
     return `${hours.padStart(2, '0')}:${minutes}`;
   };
 
-  // Convert 24h time format to 12h
   const formatTo12h = (timeString: string): string => {
     if (!timeString) return '';
     if (timeString.includes('AM') || timeString.includes('PM')) {
-      return timeString; // Already in 12h format
+      return timeString;
     }
     
     const [hours, minutes] = timeString.split(':');
@@ -102,7 +101,6 @@ const Tasks = () => {
     if (taskToUpdate) {
       const newCompleted = !taskToUpdate.completed;
       
-      // Show toast notification when task is completed
       if (newCompleted) {
         toast({
           title: "Task completed",
@@ -149,11 +147,9 @@ const Tasks = () => {
       const daysOfWeek = [...(prev.recurrence.daysOfWeek || [])];
       
       if (daysOfWeek.includes(day)) {
-        // Remove day if already selected
         const index = daysOfWeek.indexOf(day);
         daysOfWeek.splice(index, 1);
       } else {
-        // Add day if not selected
         daysOfWeek.push(day);
       }
       
@@ -177,10 +173,8 @@ const Tasks = () => {
       return;
     }
 
-    // Format time to 24-hour format
     const time24h = formatTo24h(newTask.time || '12:00 PM');
 
-    // Prepare recurrence object
     let recurrence: RecurrencePattern | undefined = undefined;
     
     if (newTask.recurrence.enabled && newTask.recurrence.type !== 'none') {
@@ -235,17 +229,14 @@ const Tasks = () => {
   };
 
   const filteredTasks = tasks.filter(task => {
-    // Filter by status
     if (activeStatus === 'pending' && task.completed) return false;
     if (activeStatus === 'completed' && !task.completed) return false;
     
-    // Filter by search query
     if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     
     return true;
   });
 
-  // Calculate stats for the charts
   const currentCompletionStatus = {
     completed: tasks.filter(task => task.completed).length,
     pending: tasks.filter(task => !task.completed).length
@@ -257,7 +248,6 @@ const Tasks = () => {
     low: tasks.filter(task => task.priority === 'low').length
   };
 
-  // Days of week for recurrence selector
   const daysOfWeek = [
     { value: 0, label: 'Sun' },
     { value: 1, label: 'Mon' },
@@ -277,7 +267,6 @@ const Tasks = () => {
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
-          {/* Search and Filter Bar */}
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-grow">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -403,7 +392,6 @@ const Tasks = () => {
                       />
                     </div>
                     
-                    {/* Recurrence Section */}
                     <div className="space-y-4 border-t pt-4">
                       <div className="flex items-center space-x-2">
                         <Checkbox 
@@ -506,7 +494,6 @@ const Tasks = () => {
             </div>
           </div>
           
-          {/* Task Tabs */}
           <Tabs defaultValue="all" onValueChange={(value) => setActiveStatus(value as any)}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="all">All Tasks</TabsTrigger>
@@ -570,7 +557,6 @@ const Tasks = () => {
           </Tabs>
         </div>
         
-        {/* Stats Column */}
         <div className="space-y-6">
           <Card>
             <CardHeader>
@@ -638,7 +624,6 @@ const Tasks = () => {
         </div>
       </div>
 
-      {/* AI Chat Assistant */}
       <AiChatSuggestions />
     </div>
   );

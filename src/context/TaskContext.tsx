@@ -86,6 +86,19 @@ interface ProductivityPattern {
   totalTimeSpent: number; // in minutes
 }
 
+interface SleepPatternAnalysis {
+  averageSleepHours: number;
+  averageBedtime: string;
+  averageWakeupTime: string;
+  sleepQualityDistribution: {
+    poor: number;
+    fair: number;
+    good: number;
+    excellent: number;
+  };
+  recommendations: string[];
+}
+
 interface TaskContextType {
   tasks: Task[];
   addTask: (task: Omit<Task, 'id'>) => void;
@@ -97,6 +110,7 @@ interface TaskContextType {
   getProductivityPatterns: () => ProductivityPattern;
   getTasksForDate: (date: Date) => Task[];
   isWeekend: (date: Date) => boolean;
+  getSleepPatterns: () => SleepPatternAnalysis;
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
@@ -257,7 +271,104 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
-  // Helper function to check if a task occurs on a specific date based on its recurrence pattern
+  const getSleepPatterns = (): SleepPatternAnalysis => {
+    // Default patterns if no data
+    const defaultAnalysis: SleepPatternAnalysis = {
+      averageSleepHours: 7.5,
+      averageBedtime: '23:00',
+      averageWakeupTime: '06:30',
+      sleepQualityDistribution: {
+        poor: 0,
+        fair: 0,
+        good: 0,
+        excellent: 0
+      },
+      recommendations: [
+        "Aim for 7-9 hours of sleep per night",
+        "Try to maintain a consistent sleep schedule",
+        "Avoid screens at least 1 hour before bedtime"
+      ]
+    };
+
+    // Filter tasks with sleep schedule data
+    const tasksWithSleepData = tasks.filter(task => task.sleepSchedule);
+    if (tasksWithSleepData.length === 0) return defaultAnalysis;
+
+    // Calculate average sleep hours
+    let totalSleepHours = 0;
+    let totalBedtimeMinutes = 0;
+    let totalWakeupMinutes = 0;
+    const qualityCount = { poor: 0, fair: 0, good: 0, excellent: 0 };
+
+    tasksWithSleepData.forEach(task => {
+      if (task.sleepSchedule) {
+        // Calculate sleep hours
+        const bedtime = task.sleepSchedule.bedtime.split(':').map(Number);
+        const wakeup = task.sleepSchedule.wakeupTime.split(':').map(Number);
+        
+        // Convert to minutes for easier calculation
+        const bedtimeMinutes = bedtime[0] * 60 + bedtime[1];
+        const wakeupMinutes = wakeup[0] * 60 + wakeup[1];
+        
+        totalBedtimeMinutes += bedtimeMinutes;
+        totalWakeupMinutes += wakeupMinutes;
+        
+        // Calculate sleep duration (handling overnight sleep)
+        let sleepMinutes = wakeupMinutes - bedtimeMinutes;
+        if (sleepMinutes < 0) sleepMinutes += 24 * 60; // Add a full day if sleeping past midnight
+        
+        totalSleepHours += sleepMinutes / 60;
+        
+        // Count sleep quality
+        if (task.sleepSchedule.quality) {
+          qualityCount[task.sleepSchedule.quality]++;
+        }
+      }
+    });
+
+    const averageSleepHours = totalSleepHours / tasksWithSleepData.length;
+    
+    // Calculate average bedtime and wakeup time
+    const avgBedtimeMinutes = Math.round(totalBedtimeMinutes / tasksWithSleepData.length);
+    const avgWakeupMinutes = Math.round(totalWakeupMinutes / tasksWithSleepData.length);
+    
+    const bedtimeHours = Math.floor(avgBedtimeMinutes / 60);
+    const bedtimeMinutesRemainder = avgBedtimeMinutes % 60;
+    const wakeupHours = Math.floor(avgWakeupMinutes / 60);
+    const wakeupMinutesRemainder = avgWakeupMinutes % 60;
+    
+    const averageBedtime = `${bedtimeHours.toString().padStart(2, '0')}:${bedtimeMinutesRemainder.toString().padStart(2, '0')}`;
+    const averageWakeupTime = `${wakeupHours.toString().padStart(2, '0')}:${wakeupMinutesRemainder.toString().padStart(2, '0')}`;
+
+    // Generate personalized recommendations
+    const recommendations = [];
+    
+    if (averageSleepHours < 7) {
+      recommendations.push("You're averaging less than 7 hours of sleep. Consider going to bed earlier.");
+    } else if (averageSleepHours > 9) {
+      recommendations.push("You're sleeping more than 9 hours on average. This might indicate other health issues.");
+    }
+    
+    const mostCommonQuality = Object.entries(qualityCount)
+      .sort((a, b) => b[1] - a[1])[0][0];
+      
+    if (mostCommonQuality === 'poor' || mostCommonQuality === 'fair') {
+      recommendations.push("Your sleep quality is frequently rated as less than good. Consider factors like room temperature, noise, or mattress quality.");
+    }
+    
+    // Add general recommendations
+    recommendations.push("Maintain a consistent sleep schedule, even on weekends");
+    recommendations.push("Create a restful environment, cool, dark and quiet");
+    
+    return {
+      averageSleepHours,
+      averageBedtime,
+      averageWakeupTime,
+      sleepQualityDistribution: qualityCount,
+      recommendations
+    };
+  };
+
   const taskOccursOnDate = (task: Task, targetDate: Date): boolean => {
     // If the task has no recurrence, it only occurs on its specified date
     if (!task.recurrence || task.recurrence.type === 'none') {
@@ -320,12 +431,10 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Function to get all tasks that should appear on a specific date
   const getTasksForDate = (date: Date): Task[] => {
     return tasks.filter(task => taskOccursOnDate(task, date));
   };
 
-  // Function to check if a date is a weekend
   const isWeekend = (date: Date): boolean => {
     const day = date.getDay();
     return day === 0 || day === 6; // 0 = Sunday, 6 = Saturday
@@ -342,7 +451,8 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
       addTimeEntry,
       getProductivityPatterns,
       getTasksForDate,
-      isWeekend
+      isWeekend,
+      getSleepPatterns
     }}>
       {children}
     </TaskContext.Provider>

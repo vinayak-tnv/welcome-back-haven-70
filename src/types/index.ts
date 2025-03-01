@@ -14,6 +14,17 @@ export interface RecurrencePattern {
   custom?: string; // For custom recurrence patterns
 }
 
+export interface WeekendPreference {
+  treatAsWorkday: boolean; // If true, treat as a normal workday
+  customHours?: string; // Optional custom hours for weekends, e.g., "10:00-14:00"
+}
+
+export interface SleepSchedule {
+  bedtime: string; // 24h format time, e.g., "23:00"
+  wakeupTime: string; // 24h format time, e.g., "07:00"
+  quality?: 'poor' | 'fair' | 'good' | 'excellent'; // Optional quality rating
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -25,6 +36,8 @@ export interface Task {
   completed: boolean;
   date: string;
   recurrence?: RecurrencePattern;
+  weekendPreference?: WeekendPreference;
+  sleepSchedule?: SleepSchedule;
 }
 
 export interface TimeSlot {
