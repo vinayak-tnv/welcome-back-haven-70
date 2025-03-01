@@ -31,6 +31,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import AiChatAssistant from '@/components/dashboard/AiChatAssistant';
+import TimeManagementAI from '@/components/focus/TimeManagementAI';
 import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
 import { useTasks } from '@/context/TaskContext';
@@ -53,7 +54,7 @@ const currentlyPlayingSong = {
 
 const Focus = () => {
   const { toast } = useToast();
-  const { tasks } = useTasks();
+  const { tasks, addTimeEntry } = useTasks();
   const [activeTab, setActiveTab] = useState('pomodoro');
   const [isMusifyConnected, setIsMusifyConnected] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -65,6 +66,13 @@ const Focus = () => {
   const [pomodoroCount, setPomodoroCount] = useState(0);
   const [customTime, setCustomTime] = useState(25);
   const interval = useRef<number | null>(null);
+  
+  // Timer session tracking
+  const [currentSession, setCurrentSession] = useState<{
+    startTime: string;
+    startTimestamp: number;
+    category: string;
+  } | null>(null);
   
   // Stopwatch states
   const [stopwatchTime, setStopwatchTime] = useState(0);
@@ -99,6 +107,19 @@ const Focus = () => {
   // Effect for timer
   useEffect(() => {
     if (isRunning) {
+      // Record session start if not already started
+      if (!currentSession) {
+        const now = new Date();
+        const formattedTime = now.getHours().toString().padStart(2, '0') + ':' + 
+                             now.getMinutes().toString().padStart(2, '0');
+        
+        setCurrentSession({
+          startTime: formattedTime,
+          startTimestamp: Date.now(),
+          category: activeTab === 'pomodoro' ? 'pomodoro' : 'custom'
+        });
+      }
+      
       interval.current = window.setInterval(() => {
         setTimeLeft((prevTime) => {
           if (prevTime <= 1) {
@@ -106,6 +127,19 @@ const Focus = () => {
             clearInterval(interval.current!);
             setIsRunning(false);
             notifyTimerEnd();
+            
+            // Record completed session
+            if (currentSession) {
+              const durationInMinutes = Math.round((Date.now() - currentSession.startTimestamp) / 60000);
+              addTimeEntry({
+                startTime: currentSession.startTime,
+                duration: durationInMinutes,
+                category: currentSession.category,
+                completed: true
+              });
+              
+              setCurrentSession(null);
+            }
             
             // Increment completed pomodoro count
             if (activeTab === 'pomodoro') {
@@ -119,6 +153,21 @@ const Focus = () => {
       }, 1000);
     } else if (interval.current) {
       clearInterval(interval.current);
+      
+      // If session was stopped manually, record partial completion
+      if (currentSession && timeLeft > 0) {
+        const durationInMinutes = Math.round((Date.now() - currentSession.startTimestamp) / 60000);
+        // Only record if at least 1 minute passed
+        if (durationInMinutes >= 1) {
+          addTimeEntry({
+            startTime: currentSession.startTime,
+            duration: durationInMinutes,
+            category: currentSession.category,
+            completed: false
+          });
+        }
+        setCurrentSession(null);
+      }
     }
     
     return () => {
@@ -126,16 +175,44 @@ const Focus = () => {
         clearInterval(interval.current);
       }
     };
-  }, [isRunning, activeTab]);
+  }, [isRunning, activeTab, addTimeEntry, currentSession, timeLeft]);
   
   // Effect for stopwatch
   useEffect(() => {
     if (isStopwatchRunning) {
+      // Record session start if not already started
+      if (!currentSession) {
+        const now = new Date();
+        const formattedTime = now.getHours().toString().padStart(2, '0') + ':' + 
+                             now.getMinutes().toString().padStart(2, '0');
+        
+        setCurrentSession({
+          startTime: formattedTime,
+          startTimestamp: Date.now(),
+          category: 'stopwatch'
+        });
+      }
+      
       stopwatchInterval.current = window.setInterval(() => {
         setStopwatchTime(prev => prev + 1);
       }, 1000);
     } else if (stopwatchInterval.current) {
       clearInterval(stopwatchInterval.current);
+      
+      // Record completed stopwatch session
+      if (currentSession && stopwatchTime > 0) {
+        const durationInMinutes = Math.round(stopwatchTime / 60);
+        // Only record if at least 1 minute passed
+        if (durationInMinutes >= 1) {
+          addTimeEntry({
+            startTime: currentSession.startTime,
+            duration: durationInMinutes,
+            category: 'stopwatch',
+            completed: true
+          });
+        }
+        setCurrentSession(null);
+      }
     }
     
     return () => {
@@ -143,7 +220,7 @@ const Focus = () => {
         clearInterval(stopwatchInterval.current);
       }
     };
-  }, [isStopwatchRunning]);
+  }, [isStopwatchRunning, addTimeEntry, currentSession, stopwatchTime]);
   
   const notifyTimerEnd = () => {
     toast({
@@ -179,6 +256,21 @@ const Focus = () => {
   const handleReset = () => {
     setIsRunning(false);
     
+    // If there's an active session, record it as incomplete
+    if (currentSession) {
+      const durationInMinutes = Math.round((Date.now() - currentSession.startTimestamp) / 60000);
+      // Only record if at least 1 minute passed
+      if (durationInMinutes >= 1) {
+        addTimeEntry({
+          startTime: currentSession.startTime,
+          duration: durationInMinutes,
+          category: currentSession.category,
+          completed: false
+        });
+      }
+      setCurrentSession(null);
+    }
+    
     if (activeTab === 'pomodoro') {
       setTimeLeft(25 * 60);
     } else if (activeTab === 'custom') {
@@ -195,10 +287,30 @@ const Focus = () => {
     setActiveTab(value);
     setIsRunning(false);
     
+    // If there's an active session, record it as incomplete
+    if (currentSession) {
+      const durationInMinutes = activeTab === 'stopwatch' 
+        ? Math.round(stopwatchTime / 60)
+        : Math.round((Date.now() - currentSession.startTimestamp) / 60000);
+      
+      // Only record if at least 1 minute passed
+      if (durationInMinutes >= 1) {
+        addTimeEntry({
+          startTime: currentSession.startTime,
+          duration: durationInMinutes,
+          category: currentSession.category,
+          completed: false
+        });
+      }
+      setCurrentSession(null);
+    }
+    
     if (value === 'pomodoro') {
       setTimeLeft(25 * 60);
     } else if (value === 'custom') {
       setTimeLeft(customTime * 60);
+    } else if (value === 'stopwatch') {
+      setStopwatchTime(0);
     }
   };
   
@@ -214,6 +326,22 @@ const Focus = () => {
   
   const handleStopwatchReset = () => {
     setIsStopwatchRunning(false);
+    
+    // If there's an active session, record it as incomplete
+    if (currentSession) {
+      const durationInMinutes = Math.round(stopwatchTime / 60);
+      // Only record if at least 1 minute passed
+      if (durationInMinutes >= 1) {
+        addTimeEntry({
+          startTime: currentSession.startTime,
+          duration: durationInMinutes,
+          category: 'stopwatch',
+          completed: false
+        });
+      }
+      setCurrentSession(null);
+    }
+    
     setStopwatchTime(0);
   };
   
@@ -725,8 +853,11 @@ const Focus = () => {
         </div>
       </div>
 
-      {/* AI Chat Assistant */}
+      {/* Regular AI Chat Assistant */}
       <AiChatAssistant />
+      
+      {/* Time Management AI Assistant */}
+      <TimeManagementAI />
     </div>
   );
 };
