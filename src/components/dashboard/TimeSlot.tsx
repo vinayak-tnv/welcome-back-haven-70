@@ -1,9 +1,10 @@
 
 import React from 'react';
-import { Clock, ChevronRight, ArrowRight } from 'lucide-react';
+import { Clock, ArrowRight } from 'lucide-react';
 import { TimeSlot as TimeSlotType } from '@/types';
 import { useTasks } from '@/context/TaskContext';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '@/context/ThemeContext';
 
 interface TimeSlotProps {
   slot: TimeSlotType;
@@ -13,7 +14,9 @@ interface TimeSlotProps {
 const TimeSlot: React.FC<TimeSlotProps> = ({ slot, date = new Date() }) => {
   const { isWeekend } = useTasks();
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const isWeekendDay = date ? isWeekend(date) : false;
+  const isDark = theme === 'dark';
 
   // Convert 12h time format to 24h if needed
   const formatTo24h = (timeString: string): string => {
@@ -52,19 +55,63 @@ const TimeSlot: React.FC<TimeSlotProps> = ({ slot, date = new Date() }) => {
 
   return (
     <div 
-      className={`time-slot group bg-white p-3 rounded-lg border flex items-center justify-between shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
-        isWeekendDay ? 'border-amber-300 bg-amber-50' : ''
-      }`}
+      className={`time-slot group ${isDark ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-gray-50'} p-3 rounded-lg border ${
+        isDark ? 'border-gray-700' : ''
+      } ${
+        isWeekendDay 
+          ? isDark 
+            ? 'border-amber-700 bg-amber-900/50' 
+            : 'border-amber-300 bg-amber-50'
+          : isDark 
+            ? 'border-gray-700' 
+            : ''
+      } flex items-center justify-between shadow-sm hover:shadow-md transition-shadow cursor-pointer`}
       onClick={handleSlotClick}
     >
       <div className="flex items-center">
-        <Clock className={`h-4 w-4 ${isWeekendDay ? 'text-amber-500' : 'text-gray-400'} mr-2`} />
-        <span className={`text-sm font-medium ${isWeekendDay ? 'text-amber-700' : ''}`}>
+        <Clock className={`h-4 w-4 ${
+          isWeekendDay 
+            ? isDark 
+              ? 'text-amber-400' 
+              : 'text-amber-500' 
+            : isDark 
+              ? 'text-gray-400' 
+              : 'text-gray-400'
+        } mr-2`} />
+        <span className={`text-sm font-medium ${
+          isWeekendDay 
+            ? isDark 
+              ? 'text-amber-400' 
+              : 'text-amber-700' 
+            : isDark 
+              ? 'text-gray-300' 
+              : ''
+        }`}>
           {time24h}
-          {isWeekendDay && <span className="ml-2 text-xs bg-amber-200 px-1.5 py-0.5 rounded-full">Weekend</span>}
+          {isWeekendDay && (
+            <span className={`ml-2 text-xs ${
+              isDark 
+                ? 'bg-amber-800/50 text-amber-300' 
+                : 'bg-amber-200 text-amber-800'
+            } px-1.5 py-0.5 rounded-full`}>
+              Weekend
+            </span>
+          )}
         </span>
       </div>
-      <ArrowRight className={`h-4 w-4 ${isWeekendDay ? 'text-amber-400' : 'text-gray-400'} group-hover:text-gray-600 transition-colors`} />
+      <ArrowRight className={`h-4 w-4 ${
+        isWeekendDay 
+          ? isDark 
+            ? 'text-amber-600' 
+            : 'text-amber-400' 
+          : isDark 
+            ? 'text-gray-500' 
+            : 'text-gray-400'
+      } group-hover:${
+        isDark 
+          ? 'text-gray-300' 
+          : 'text-gray-600'
+      } transition-colors`} />
     </div>
   );
 };
