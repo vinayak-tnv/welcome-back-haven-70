@@ -4,15 +4,18 @@ import { BrowserRouter } from 'react-router-dom';
 import MainLayout from './components/layout/MainLayout';
 import { Toaster } from './components/ui/toaster';
 import { ThemeProvider } from './context/ThemeContext';
+import { AuthProvider } from './context/AuthContext';
 
 function App() {
   return (
     <ThemeProvider>
       <BrowserRouter>
-        <TaskProvider>
-          <MainLayout />
-          <Toaster />
-        </TaskProvider>
+        <AuthProvider>
+          <TaskProvider>
+            <MainLayout />
+            <Toaster />
+          </TaskProvider>
+        </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>
   );
