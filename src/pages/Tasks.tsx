@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -52,8 +52,31 @@ const Tasks = () => {
       interval: 1,
       endDate: '',
       daysOfWeek: []
+    },
+    weekendPreference: {
+      treatAsWorkday: false,
+      customHours: ''
+    },
+    sleepSchedule: {
+      bedtime: '',
+      wakeupTime: '',
+      quality: 'good' as 'poor' | 'fair' | 'good' | 'excellent'
     }
   });
+
+  const location = window.location;
+  const params = new URLSearchParams(location.search);
+  const timeParam = params.get('time');
+
+  useEffect(() => {
+    if (timeParam) {
+      setNewTask(prev => ({
+        ...prev,
+        time: timeParam
+      }));
+      setNewTaskOpen(true);
+    }
+  }, [timeParam]);
 
   const formatTo24h = (timeString: string): string => {
     if (!timeString) return '';
@@ -163,6 +186,26 @@ const Tasks = () => {
     });
   };
 
+  const handleWeekendPreferenceChange = (field: string, value: any) => {
+    setNewTask(prev => ({
+      ...prev,
+      weekendPreference: {
+        ...prev.weekendPreference,
+        [field]: value
+      }
+    }));
+  };
+
+  const handleSleepScheduleChange = (field: string, value: any) => {
+    setNewTask(prev => ({
+      ...prev,
+      sleepSchedule: {
+        ...prev.sleepSchedule,
+        [field]: value
+      }
+    }));
+  };
+
   const handleAddTask = () => {
     if (!newTask.title.trim()) {
       toast({
@@ -192,6 +235,23 @@ const Tasks = () => {
       }
     }
 
+    let weekendPreference: WeekendPreference | undefined = undefined;
+    if (newTask.weekendPreference.treatAsWorkday || newTask.weekendPreference.customHours) {
+      weekendPreference = {
+        treatAsWorkday: newTask.weekendPreference.treatAsWorkday,
+        customHours: newTask.weekendPreference.customHours || undefined
+      };
+    }
+
+    let sleepSchedule: SleepSchedule | undefined = undefined;
+    if (newTask.sleepSchedule.bedtime || newTask.sleepSchedule.wakeupTime) {
+      sleepSchedule = {
+        bedtime: newTask.sleepSchedule.bedtime,
+        wakeupTime: newTask.sleepSchedule.wakeupTime,
+        quality: newTask.sleepSchedule.quality
+      };
+    }
+
     addTask({
       title: newTask.title,
       description: newTask.description,
@@ -201,7 +261,9 @@ const Tasks = () => {
       category: newTask.category as 'work' | 'personal' | 'meeting' | 'health',
       completed: false,
       date: newTask.date,
-      recurrence
+      recurrence,
+      weekendPreference,
+      sleepSchedule
     });
 
     setNewTaskOpen(false);
@@ -219,8 +281,21 @@ const Tasks = () => {
         interval: 1,
         endDate: '',
         daysOfWeek: []
+      },
+      weekendPreference: {
+        treatAsWorkday: false,
+        customHours: ''
+      },
+      sleepSchedule: {
+        bedtime: '',
+        wakeupTime: '',
+        quality: 'good'
       }
     });
+
+    if (timeParam) {
+      window.history.replaceState({}, '', '/tasks');
+    }
 
     toast({
       title: "Task added",
@@ -484,9 +559,85 @@ const Tasks = () => {
                         </div>
                       )}
                     </div>
+                    
+                    <div className="space-y-4 border-t pt-4">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="weekendPreference" 
+                          checked={newTask.weekendPreference.treatAsWorkday}
+                          onCheckedChange={(checked) => 
+                            handleWeekendPreferenceChange('treatAsWorkday', checked === true)
+                          }
+                        />
+                        <Label htmlFor="weekendPreference" className="font-medium">
+                          Treat weekend as workday
+                        </Label>
+                      </div>
+                      
+                      {!newTask.weekendPreference.treatAsWorkday && (
+                        <div className="space-y-2 pl-6">
+                          <Label htmlFor="customHours">Custom Hours for Weekend (Optional)</Label>
+                          <Input
+                            id="customHours"
+                            placeholder="e.g., 10:00-14:00"
+                            value={newTask.weekendPreference.customHours}
+                            onChange={(e) => handleWeekendPreferenceChange('customHours', e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-4 border-t pt-4">
+                      <h3 className="text-sm font-medium">Sleep Schedule</h3>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="bedtime">Bedtime</Label>
+                          <Input
+                            id="bedtime"
+                            type="time"
+                            value={newTask.sleepSchedule.bedtime}
+                            onChange={(e) => handleSleepScheduleChange('bedtime', e.target.value)}
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="wakeupTime">Wake-up Time</Label>
+                          <Input
+                            id="wakeupTime"
+                            type="time"
+                            value={newTask.sleepSchedule.wakeupTime}
+                            onChange={(e) => handleSleepScheduleChange('wakeupTime', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="sleepQuality">Sleep Quality</Label>
+                        <Select
+                          value={newTask.sleepSchedule.quality}
+                          onValueChange={(value) => handleSleepScheduleChange('quality', value)}
+                        >
+                          <SelectTrigger id="sleepQuality">
+                            <SelectValue placeholder="Select sleep quality" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="poor">Poor</SelectItem>
+                            <SelectItem value="fair">Fair</SelectItem>
+                            <SelectItem value="good">Good</SelectItem>
+                            <SelectItem value="excellent">Excellent</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                   </div>
                   <DialogFooter>
-                    <Button variant="ghost" onClick={() => setNewTaskOpen(false)}>Cancel</Button>
+                    <Button variant="ghost" onClick={() => {
+                      setNewTaskOpen(false);
+                      if (timeParam) {
+                        window.history.replaceState({}, '', '/tasks');
+                      }
+                    }}>Cancel</Button>
                     <Button onClick={handleAddTask}>Add Task</Button>
                   </DialogFooter>
                 </DialogContent>

@@ -1,8 +1,9 @@
 
 import React from 'react';
-import { Clock, ChevronRight } from 'lucide-react';
+import { Clock, ChevronRight, ArrowRight } from 'lucide-react';
 import { TimeSlot as TimeSlotType } from '@/types';
 import { useTasks } from '@/context/TaskContext';
+import { useNavigate } from 'react-router-dom';
 
 interface TimeSlotProps {
   slot: TimeSlotType;
@@ -11,6 +12,7 @@ interface TimeSlotProps {
 
 const TimeSlot: React.FC<TimeSlotProps> = ({ slot, date = new Date() }) => {
   const { isWeekend } = useTasks();
+  const navigate = useNavigate();
   const isWeekendDay = date ? isWeekend(date) : false;
 
   // Convert 12h time format to 24h if needed
@@ -42,10 +44,19 @@ const TimeSlot: React.FC<TimeSlotProps> = ({ slot, date = new Date() }) => {
   // Display time in 24h format
   const time24h = formatTo24h(slot.time);
 
+  const handleSlotClick = () => {
+    // Navigate to the tasks page with the time parameter
+    const timeParam = encodeURIComponent(time24h);
+    navigate(`/tasks?time=${timeParam}`);
+  };
+
   return (
-    <div className={`time-slot group bg-white p-3 rounded-lg border flex items-center justify-between shadow-sm hover:shadow-md transition-shadow ${
-      isWeekendDay ? 'border-amber-300 bg-amber-50' : ''
-    }`}>
+    <div 
+      className={`time-slot group bg-white p-3 rounded-lg border flex items-center justify-between shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
+        isWeekendDay ? 'border-amber-300 bg-amber-50' : ''
+      }`}
+      onClick={handleSlotClick}
+    >
       <div className="flex items-center">
         <Clock className={`h-4 w-4 ${isWeekendDay ? 'text-amber-500' : 'text-gray-400'} mr-2`} />
         <span className={`text-sm font-medium ${isWeekendDay ? 'text-amber-700' : ''}`}>
@@ -53,7 +64,7 @@ const TimeSlot: React.FC<TimeSlotProps> = ({ slot, date = new Date() }) => {
           {isWeekendDay && <span className="ml-2 text-xs bg-amber-200 px-1.5 py-0.5 rounded-full">Weekend</span>}
         </span>
       </div>
-      <ChevronRight className={`h-4 w-4 ${isWeekendDay ? 'text-amber-400' : 'text-gray-400'} group-hover:text-gray-600 transition-colors`} />
+      <ArrowRight className={`h-4 w-4 ${isWeekendDay ? 'text-amber-400' : 'text-gray-400'} group-hover:text-gray-600 transition-colors`} />
     </div>
   );
 };
