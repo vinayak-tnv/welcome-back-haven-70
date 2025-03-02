@@ -6,6 +6,7 @@ type Theme = 'light' | 'dark';
 interface ThemeContextType {
   theme: Theme;
   toggleTheme: () => void;
+  setTheme: (theme: Theme) => void; // Add this line to fix the Settings.tsx error
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -23,10 +24,15 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return 'light'; // Default to light theme
   };
 
-  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+
+  const setTheme = (newTheme: Theme) => {
+    setThemeState(newTheme);
+    localStorage.setItem('theme', newTheme);
+  };
 
   const toggleTheme = () => {
-    setTheme(prevTheme => {
+    setThemeState(prevTheme => {
       const newTheme = prevTheme === 'light' ? 'dark' : 'light';
       localStorage.setItem('theme', newTheme);
       return newTheme;
@@ -40,7 +46,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [theme]);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );
