@@ -1,6 +1,5 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, User, Send, X, Sparkles, Calendar, Lightbulb, Mic, MicOff, Loader2 } from 'lucide-react';
+import { Bot, User, Send, X, Sparkles, Calendar, Lightbulb, Mic, MicOff, Loader2, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -9,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { useTasks } from '@/context/TaskContext';
 import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 
 interface Message {
   id: string;
@@ -52,8 +52,8 @@ const suggestedPrompts = [
   "Generate a weekly planning template"
 ];
 
-// Use the provided API key directly
-const GEMINI_API_KEY = "AIzaSyBFT3XFk9GpPGxt70u9emdUbiDarUkL5fc";
+// Default API key - can be overridden by user
+const DEFAULT_API_KEY = "AIzaSyBFT3XFk9GpPGxt70u9emdUbiDarUkL5fc";
 
 const AiChatAssistant: React.FC = () => {
   const { toast } = useToast();
@@ -67,6 +67,14 @@ const AiChatAssistant: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [isVoiceSupported, setIsVoiceSupported] = useState(true);
+  const [apiKey, setApiKey] = useState<string>(() => {
+    // Try to load from localStorage
+    const savedKey = localStorage.getItem('geminiApiKey');
+    return savedKey || DEFAULT_API_KEY;
+  });
+  const [tempApiKey, setTempApiKey] = useState(apiKey);
+  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   
@@ -142,10 +150,28 @@ const AiChatAssistant: React.FC = () => {
     }
   }, [messages]);
 
+  const saveApiKey = () => {
+    // Validate and save API key
+    if (tempApiKey.trim()) {
+      setApiKey(tempApiKey);
+      localStorage.setItem('geminiApiKey', tempApiKey);
+      setIsApiKeyDialogOpen(false);
+      toast({
+        title: "API Key Saved",
+        description: "Your Gemini API key has been saved successfully.",
+      });
+    } else {
+      toast({
+        title: "Invalid API Key",
+        description: "Please enter a valid API key.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const callGeminiApi = async (text: string): Promise<string> => {
     try {
-      // Updated to use Gemini 1.0 Pro endpoint
-      const url = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
       
       // Get the last 5 messages to provide context (excluding the current message)
       const recentMessages = messages.slice(-5).map(msg => ({
@@ -153,7 +179,7 @@ const AiChatAssistant: React.FC = () => {
         role: msg.sender === 'user' ? 'user' : 'model'
       }));
       
-      const response = await fetch(`${url}?key=${GEMINI_API_KEY}`, {
+      const response = await fetch(`${url}?key=${apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -200,7 +226,7 @@ const AiChatAssistant: React.FC = () => {
       return data.candidates[0].content.parts[0].text;
     } catch (error) {
       console.error('Error calling Gemini API:', error);
-      return "Sorry, there was an error communicating with the Gemini API. Please try again.";
+      return "Sorry, there was an error communicating with the Gemini API. Please try again or check your API key.";
     }
   };
 
@@ -476,6 +502,36 @@ const AiChatAssistant: React.FC = () => {
 
   return (
     <>
+      {/* API Key Dialog */}
+      <Dialog open={isApiKeyDialogOpen} onOpenChange={setIsApiKeyDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set Gemini API Key</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <p className="text-sm text-gray-500">
+                Enter your Gemini API key. You can get one from the Google AI Studio.
+              </p>
+              <Input
+                value={tempApiKey}
+                onChange={(e) => setTempApiKey(e.target.value)}
+                placeholder="Enter your Gemini API key"
+                className="w-full"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsApiKeyDialogOpen(false)} variant="outline">
+              Cancel
+            </Button>
+            <Button onClick={saveApiKey} className="bg-blue-600 hover:bg-blue-700">
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Floating button */}
       <Button
         onClick={toggleChat}
@@ -496,6 +552,15 @@ const AiChatAssistant: React.FC = () => {
         )}
       >
         {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+      </Button>
+      
+      {/* API Settings button */}
+      <Button
+        onClick={() => setIsApiKeyDialogOpen(true)}
+        className="fixed bottom-6 right-40 h-12 w-12 rounded-full shadow-lg flex items-center justify-center p-0 z-50 bg-gray-600 hover:bg-gray-700"
+        title="Set API Key"
+      >
+        <Settings className="h-5 w-5" />
       </Button>
       
       {/* Chat panel */}
