@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, User, Send, X, Sparkles, Calendar, Lightbulb, Mic, MicOff, Loader2, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -171,7 +172,8 @@ const AiChatAssistant: React.FC = () => {
 
   const callGeminiApi = async (text: string): Promise<string> => {
     try {
-      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+      // Updated to use correct Gemini API endpoint (v1 instead of v1beta)
+      const url = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
       
       // Get the last 5 messages to provide context (excluding the current message)
       const recentMessages = messages.slice(-5).map(msg => ({
