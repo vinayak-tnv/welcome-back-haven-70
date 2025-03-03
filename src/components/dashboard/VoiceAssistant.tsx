@@ -1,62 +1,43 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Bot, X, Send } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Mic, MicOff, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useTasks } from '@/context/TaskContext';
+import { useToast } from '@/hooks/use-toast';
 
-interface Message {
-  id: string;
-  text: string;
-  sender: 'user' | 'ai';
-  timestamp: Date;
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onerror: (event: any) => void;
+  onresult: (event: any) => void;
+  onend: (event: any) => void;
 }
 
-const initialMessages: Message[] = [
-  {
-    id: '1',
-    text: "Hello! I'm your voice assistant powered by Gemini. Speak to me by clicking the microphone button.",
-    sender: 'ai',
-    timestamp: new Date(),
-  },
-];
-
-// Default API key
-const DEFAULT_API_KEY = "AIzaSyBFT3XFk9GpPGxt70u9emdUbiDarUkL5fc";
+interface Window {
+  SpeechRecognition: new () => SpeechRecognition;
+  webkitSpeechRecognition: new () => SpeechRecognition;
+}
 
 const VoiceAssistant: React.FC = () => {
-  const { toast } = useToast();
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [response, setResponse] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [apiKey, setApiKey] = useState<string>(() => {
-    // Try to load from localStorage
-    const savedKey = localStorage.getItem('geminiApiKey');
-    return savedKey || DEFAULT_API_KEY;
-  });
-  
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null);
-  
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
+  const [isSupported, setIsSupported] = useState(true);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const { toast } = useToast();
+  const { addTask, getProductivityPatterns, getSleepPatterns } = useTasks();
 
-  // Initialize speech recognition on component mount
   useEffect(() => {
+    // Check if browser supports speech recognition
     if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
-      toast({
-        title: "Voice Assistant Unavailable",
-        description: "Speech recognition is not supported in your browser.",
-        variant: "destructive"
-      });
+      setIsSupported(false);
       return;
     }
 
@@ -95,47 +76,16 @@ const VoiceAssistant: React.FC = () => {
     };
   }, [toast]);
 
-  const callGeminiApi = async (text: string): Promise<string> => {
-    try {
-      // FIXED: Using the correct Gemini API endpoint with the proper model name
-      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
-      
-      const response = await fetch(`${url}?key=${apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{
-                text: `You are a helpful voice assistant. Please respond to the following query in a concise way: "${text}"`
-              }],
-              role: "user"
-            }
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 512,
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.candidates[0].content.parts[0].text;
-    } catch (error) {
-      console.error('Error calling Gemini API:', error);
-      return "Sorry, there was an error communicating with the Gemini API. Please try again.";
-    }
-  };
-
   const toggleListening = () => {
+    if (!isSupported) {
+      toast({
+        title: "Not Supported",
+        description: "Speech recognition is not supported in your browser.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (isListening) {
       stopListening();
     } else {
@@ -145,6 +95,7 @@ const VoiceAssistant: React.FC = () => {
 
   const startListening = () => {
     setTranscript("");
+    setResponse("");
     setIsListening(true);
     recognitionRef.current?.start();
     
@@ -159,153 +110,139 @@ const VoiceAssistant: React.FC = () => {
     recognitionRef.current?.stop();
   };
 
-  const processVoiceCommand = async (text: string) => {
-    // Add user message
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: text,
-      sender: 'user',
-      timestamp: new Date(),
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
+  const processVoiceCommand = (text: string) => {
     setIsProcessing(true);
-    
-    try {
-      // Call Gemini API
-      const geminiResponse = await callGeminiApi(text);
-      
-      // Add AI response
-      const aiMessage: Message = {
-        id: Date.now().toString(),
-        text: geminiResponse,
-        sender: 'ai',
-        timestamp: new Date(),
-      };
-      
-      setMessages(prev => [...prev, aiMessage]);
+    const lowerText = text.toLowerCase();
+
+    // Simple NLP - command detection
+    setTimeout(() => {
+      let responseText = "";
+
+      // Add task command
+      if (lowerText.includes("add task") || lowerText.includes("create task") || lowerText.includes("new task")) {
+        const titleMatch = text.match(/(?:add|create|new)\s+task\s+(?:called|named|titled)?\s*["']?([^"']+)["']?/i);
+        const title = titleMatch ? titleMatch[1] : "New task";
+        
+        // Extract time
+        const timeMatch = text.match(/at\s+(\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)/i);
+        const time = timeMatch ? convertToTime(timeMatch[1]) : "09:00";
+        
+        // Extract priority
+        let priority: 'high' | 'medium' | 'low' = 'medium';
+        if (lowerText.includes("high priority") || lowerText.includes("important")) priority = 'high';
+        if (lowerText.includes("low priority") || lowerText.includes("not important")) priority = 'low';
+        
+        // Create task
+        addTask({
+          title,
+          time,
+          priority,
+          completed: false,
+          date: new Date().toISOString().split('T')[0]
+        });
+        
+        responseText = `Added task "${title}" at ${time} with ${priority} priority.`;
+      }
+      // Sleep analysis command
+      else if (lowerText.includes("sleep") && (lowerText.includes("analysis") || lowerText.includes("pattern") || lowerText.includes("report"))) {
+        const sleepData = getSleepPatterns();
+        responseText = `You sleep an average of ${sleepData.averageSleepHours.toFixed(1)} hours per night. Your usual bedtime is ${sleepData.averageBedtime} and you typically wake up at ${sleepData.averageWakeupTime}. ${sleepData.recommendations[0]}`;
+      }
+      // Productivity command 
+      else if (lowerText.includes("productivity") || (lowerText.includes("how") && lowerText.includes("productive"))) {
+        const productivity = getProductivityPatterns();
+        responseText = `You're most productive during the ${productivity.mostProductiveTimeOfDay}, and ${productivity.mostProductiveDay} is your most productive day. Your average focus session lasts ${Math.round(productivity.averageFocusSessionLength)} minutes.`;
+      }
+      // Fallback
+      else {
+        responseText = "I'm sorry, I didn't understand that command. You can ask me to add tasks, analyze sleep patterns, or check productivity.";
+      }
+
+      setResponse(responseText);
+      setIsProcessing(false);
       
       // Text-to-speech response
       if ('speechSynthesis' in window) {
-        const speech = new SpeechSynthesisUtterance(geminiResponse);
+        const speech = new SpeechSynthesisUtterance(responseText);
         speech.lang = 'en-US';
         window.speechSynthesis.speak(speech);
       }
-    } catch (error) {
-      // Handle error
-      const errorMessage: Message = {
-        id: Date.now().toString(),
-        text: "Sorry, I encountered an error. Please try again.",
-        sender: 'ai',
-        timestamp: new Date(),
-      };
-      
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsProcessing(false);
-    }
+    }, 1000);
   };
 
-  const toggleChat = () => {
-    setIsOpen(!isOpen);
+  // Convert various time formats to 24h format
+  const convertToTime = (timeStr: string): string => {
+    // Handle formats like "9am", "9:30 pm", etc.
+    const cleanTime = timeStr.toLowerCase().trim();
+    let hours = 0;
+    let minutes = 0;
+    
+    if (cleanTime.includes(':')) {
+      // Format like "9:30 am"
+      const parts = cleanTime.split(':');
+      hours = parseInt(parts[0], 10);
+      const minutesPart = parts[1].replace(/[^0-9]/g, '');
+      minutes = parseInt(minutesPart, 10);
+      
+      if (cleanTime.includes('pm') && hours < 12) {
+        hours += 12;
+      }
+      if (cleanTime.includes('am') && hours === 12) {
+        hours = 0;
+      }
+    } else {
+      // Format like "9am" or "9 am"
+      const numericPart = cleanTime.replace(/[^0-9]/g, '');
+      hours = parseInt(numericPart, 10);
+      
+      if (cleanTime.includes('pm') && hours < 12) {
+        hours += 12;
+      }
+      if (cleanTime.includes('am') && hours === 12) {
+        hours = 0;
+      }
+    }
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   };
 
   return (
-    <>
-      {/* Floating button */}
-      <Button
-        onClick={toggleChat}
-        className={cn(
-          "fixed bottom-6 left-6 h-14 w-14 rounded-full shadow-lg flex items-center justify-center p-0 z-40",
-          !isOpen ? "bg-purple-600 hover:bg-purple-700" : "bg-gray-600 hover:bg-gray-700"
-        )}
+    <div className="fixed bottom-6 left-24 z-50">
+      <Button 
+        onClick={toggleListening}
+        className={`h-14 w-14 rounded-full shadow-lg flex items-center justify-center p-0 ${
+          isListening ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'
+        }`}
       >
-        {!isOpen ? <Mic className="h-6 w-6" /> : <X className="h-6 w-6" />}
+        {isListening ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
       </Button>
       
-      {/* Chat panel */}
-      <div className={cn(
-        "fixed bottom-24 left-6 w-80 shadow-lg rounded-lg transition-all duration-300 transform z-40",
-        isOpen ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0 pointer-events-none"
-      )}>
-        <Card className="border-none shadow-xl">
-          <CardHeader className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-t-lg py-3">
-            <CardTitle className="text-base font-medium flex items-center gap-2">
-              <Mic className="h-4 w-4" />
-              Voice Assistant
-              <Badge variant="secondary" className="ml-auto bg-white/20 text-white hover:bg-white/30">
-                Powered by Gemini
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-80 p-4">
-              <div className="space-y-4">
-                {messages.map((message) => (
-                  <div 
-                    key={message.id} 
-                    className={cn(
-                      "flex items-start gap-2.5",
-                      message.sender === 'user' ? "flex-row-reverse" : ""
-                    )}
-                  >
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-                      message.sender === 'user' ? "bg-purple-100" : "bg-gray-100"
-                    )}>
-                      {message.sender === 'user' ? (
-                        <Mic className="h-4 w-4 text-purple-600" />
-                      ) : (
-                        <Bot className="h-4 w-4 text-gray-600" />
-                      )}
-                    </div>
-                    <div className={cn(
-                      "max-w-[75%] p-3 rounded-lg text-sm",
-                      message.sender === 'user' 
-                        ? "bg-purple-600 text-white rounded-tr-none" 
-                        : "bg-gray-100 text-gray-800 rounded-tl-none"
-                    )}>
-                      {message.text}
-                    </div>
-                  </div>
-                ))}
-                
-                {isProcessing && (
-                  <div className="flex justify-center">
-                    <div className="animate-pulse flex items-center justify-center gap-1">
-                      <div className="h-2 w-2 bg-purple-600 rounded-full"></div>
-                      <div className="h-2 w-2 bg-purple-600 rounded-full delay-75"></div>
-                      <div className="h-2 w-2 bg-purple-600 rounded-full delay-150"></div>
-                    </div>
-                  </div>
-                )}
-                
-                <div ref={messagesEndRef} />
+      {(transcript || response) && (
+        <Card className="absolute bottom-16 -left-32 w-80 shadow-lg transition-all duration-300 transform">
+          <CardContent className="p-3 space-y-3">
+            {transcript && (
+              <div className="space-y-1">
+                <Badge variant="outline" className="bg-gray-100">You said:</Badge>
+                <p className="text-sm text-gray-700">{transcript}</p>
               </div>
-            </ScrollArea>
+            )}
+            
+            {isProcessing && (
+              <div className="flex items-center justify-center py-2">
+                <Loader2 className="h-5 w-5 text-indigo-500 animate-spin" />
+              </div>
+            )}
+            
+            {response && (
+              <div className="space-y-1">
+                <Badge variant="outline" className="bg-indigo-100 text-indigo-700">Assistant:</Badge>
+                <p className="text-sm">{response}</p>
+              </div>
+            )}
           </CardContent>
-          <CardFooter className="p-3 border-t">
-            <Button 
-              onClick={toggleListening}
-              className={cn(
-                "w-full justify-center",
-                isListening ? "bg-red-500 hover:bg-red-600" : "bg-purple-600 hover:bg-purple-700"
-              )}
-            >
-              {isListening ? (
-                <>
-                  <MicOff className="h-4 w-4 mr-2" /> Stop Listening
-                </>
-              ) : (
-                <>
-                  <Mic className="h-4 w-4 mr-2" /> {transcript ? "Speak Again" : "Speak Now"}
-                </>
-              )}
-            </Button>
-          </CardFooter>
         </Card>
-      </div>
-    </>
+      )}
+    </div>
   );
 };
 

@@ -1,15 +1,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, User, Send, X, Sparkles, Calendar, Lightbulb, Mic, MicOff, Loader2, Settings } from 'lucide-react';
+import { Bot, User, Send, X, Sparkles, Calendar, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { useTasks } from '@/context/TaskContext';
-import { useToast } from '@/hooks/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 
 interface Message {
   id: string;
@@ -18,27 +15,10 @@ interface Message {
   timestamp: Date;
 }
 
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onerror: (event: any) => void;
-  onresult: (event: any) => void;
-  onend: (event: any) => void;
-}
-
-interface Window {
-  SpeechRecognition: new () => SpeechRecognition;
-  webkitSpeechRecognition: new () => SpeechRecognition;
-}
-
 const initialMessages: Message[] = [
   {
     id: '1',
-    text: "Hello! I'm your Gemini-powered assistant. I can help you with scheduling, planning, and provide suggestions for your day. How can I help you today?",
+    text: "Hello! I'm your AI assistant. I can help you with scheduling, planning, and provide suggestions for your day. How can I help you today?",
     sender: 'ai',
     timestamp: new Date(),
   },
@@ -53,31 +33,24 @@ const suggestedPrompts = [
   "Generate a weekly planning template"
 ];
 
-// Default API key - can be overridden by user
-const DEFAULT_API_KEY = "AIzaSyBFT3XFk9GpPGxt70u9emdUbiDarUkL5fc";
+// Premade suggestions that the AI will provide periodically
+const aiSuggestions = [
+  "Did you know that scheduling your most challenging tasks during your peak energy hours can boost productivity by up to 30%?",
+  "Consider using the Pomodoro Technique: work for 25 minutes, then take a 5-minute break to maintain focus and energy.",
+  "Research shows that short breaks between meetings can reduce stress and improve decision-making. Try adding 5-10 minute buffers.",
+  "For better work-life balance, try scheduling personal activities with the same priority as work tasks.",
+  "Morning routines have been linked to improved productivity. Consider establishing a consistent start to your day.",
+  "Try time-blocking your schedule to reduce context switching, which can waste up to 40% of your productive time.",
+  "Scheduling dedicated 'no meeting' days can increase deep work output by allowing for longer periods of uninterrupted focus."
+];
 
 const AiChatAssistant: React.FC = () => {
-  const { toast } = useToast();
-  const { addTask, getProductivityPatterns, getSleepPatterns } = useTasks();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [currentMessage, setCurrentMessage] = useState('');
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [currentSuggestion, setCurrentSuggestion] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState("");
-  const [isVoiceSupported, setIsVoiceSupported] = useState(true);
-  const [apiKey, setApiKey] = useState<string>(() => {
-    // Try to load from localStorage
-    const savedKey = localStorage.getItem('geminiApiKey');
-    return savedKey || DEFAULT_API_KEY;
-  });
-  const [tempApiKey, setTempApiKey] = useState(apiKey);
-  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
-  
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
   
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -101,48 +74,7 @@ const AiChatAssistant: React.FC = () => {
         console.error('Error parsing saved messages:', error);
       }
     }
-    
-    // Initialize speech recognition
-    if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
-      setIsVoiceSupported(false);
-      return;
-    }
-
-    // Initialize speech recognition
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.continuous = false;
-    recognitionRef.current.interimResults = false;
-    recognitionRef.current.lang = 'en-US';
-
-    recognitionRef.current.onresult = (event: any) => {
-      const current = event.resultIndex;
-      const transcriptText = event.results[current][0].transcript;
-      setTranscript(transcriptText);
-      setCurrentMessage(transcriptText);
-      processVoiceCommand(transcriptText);
-    };
-
-    recognitionRef.current.onerror = (event: any) => {
-      console.error('Speech recognition error', event.error);
-      toast({
-        title: "Voice Recognition Error",
-        description: `Error: ${event.error}. Please try again.`,
-        variant: "destructive"
-      });
-      setIsListening(false);
-    };
-
-    recognitionRef.current.onend = () => {
-      setIsListening(false);
-    };
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
-    };
-  }, [toast]);
+  }, []);
 
   // Save messages to localStorage whenever they change
   useEffect(() => {
@@ -151,89 +83,32 @@ const AiChatAssistant: React.FC = () => {
     }
   }, [messages]);
 
-  const saveApiKey = () => {
-    // Validate and save API key
-    if (tempApiKey.trim()) {
-      setApiKey(tempApiKey);
-      localStorage.setItem('geminiApiKey', tempApiKey);
-      setIsApiKeyDialogOpen(false);
-      toast({
-        title: "API Key Saved",
-        description: "Your Gemini API key has been saved successfully.",
-      });
-    } else {
-      toast({
-        title: "Invalid API Key",
-        description: "Please enter a valid API key.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const callGeminiApi = async (text: string): Promise<string> => {
-    try {
-      // FIXED: Updated to use the correct Gemini API endpoint with proper model name
-      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+  // Effect to show AI suggestions periodically
+  useEffect(() => {
+    // Only show suggestions if chat is open and not too frequently
+    if (!isOpen || messages.length > 15) return;
+    
+    const suggestionTimer = setTimeout(() => {
+      // Only show suggestions if there's a gap in conversation (at least 10 seconds since last message)
+      const lastMessageTime = messages[messages.length - 1]?.timestamp || new Date(0);
+      const timeElapsed = new Date().getTime() - lastMessageTime.getTime();
       
-      // Get the last 5 messages to provide context (excluding the current message)
-      const recentMessages = messages.slice(-5).map(msg => ({
-        parts: [{ text: msg.text }],
-        role: msg.sender === 'user' ? 'user' : 'model'
-      }));
-      
-      const response = await fetch(`${url}?key=${apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            ...recentMessages,
-            {
-              parts: [{
-                text: `You are a helpful AI assistant for a task management app. The user has said: "${text}".
-                
-                If the user is asking to create a task, respond in this JSON format:
-                {"action": "addTask", "title": "Task title", "time": "HH:MM", "priority": "high/medium/low"}
-                
-                If the user is asking to generate a schedule or plan, provide useful advice formatted as a list.
-                
-                If the user is asking about sleep analysis:
-                {"action": "sleepAnalysis"}
-                
-                If the user is asking about productivity info:
-                {"action": "productivityInfo"}
-                
-                If it's any other type of request, respond in a helpful, concise way as an AI assistant focused on productivity.
-                
-                Your response should be direct and informative, focusing on productivity and time management.`
-              }],
-              role: "user"
-            }
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 1024,
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
+      if (timeElapsed > 10000 && !showSuggestion) {
+        const randomSuggestion = aiSuggestions[Math.floor(Math.random() * aiSuggestions.length)];
+        setCurrentSuggestion(randomSuggestion);
+        setShowSuggestion(true);
       }
+    }, 15000);
+    
+    return () => clearTimeout(suggestionTimer);
+  }, [isOpen, messages, showSuggestion]);
 
-      const data = await response.json();
-      return data.candidates[0].content.parts[0].text;
-    } catch (error) {
-      console.error('Error calling Gemini API:', error);
-      return "Sorry, there was an error communicating with the Gemini API. Please try again or check your API key.";
-    }
-  };
-
-  const handleSendMessage = async () => {
+  const handleSendMessage = () => {
     if (!currentMessage.trim()) return;
+    
+    // Check if the message is a thank you message
+    const thankYouRegex = /\b(thank\s?you|thanks)\b/i;
+    const isThankYou = thankYouRegex.test(currentMessage.toLowerCase());
     
     // Add user message
     const userMessage: Message = {
@@ -246,256 +121,90 @@ const AiChatAssistant: React.FC = () => {
     setMessages(prev => [...prev, userMessage]);
     setCurrentMessage('');
     setShowSuggestion(false); // Hide any suggestion when user sends a message
-    setIsProcessing(true);
     
-    try {
-      // Call Gemini API
-      const geminiResponse = await callGeminiApi(userMessage.text);
+    // Simulate AI response after a short delay
+    setTimeout(() => {
+      let aiResponse = '';
       
-      try {
-        // Try to parse as JSON for task creation
-        const parsedResponse = JSON.parse(geminiResponse);
+      // If the message is a thank you, provide a closing message and close the chat
+      if (isThankYou) {
+        aiResponse = "You're welcome! I'm glad I could help. Feel free to reach out again if you need any assistance with your planning. Have a great day!";
         
-        if (parsedResponse.action === "addTask") {
-          // Extract task details and add the task
-          addTask({
-            title: parsedResponse.title,
-            time: parsedResponse.time,
-            priority: parsedResponse.priority as 'high' | 'medium' | 'low',
-            completed: false,
-            date: new Date().toISOString().split('T')[0]
-          });
-          
-          // Add AI response message
-          const aiMessage: Message = {
-            id: Date.now().toString(),
-            text: `I've created a task "${parsedResponse.title}" scheduled for ${parsedResponse.time} with ${parsedResponse.priority} priority.`,
-            sender: 'ai',
-            timestamp: new Date(),
-          };
-          
-          setMessages(prev => [...prev, aiMessage]);
-        } 
-        else if (parsedResponse.action === "sleepAnalysis") {
-          const sleepData = getSleepPatterns();
-          const aiMessage: Message = {
-            id: Date.now().toString(),
-            text: `You sleep an average of ${sleepData.averageSleepHours.toFixed(1)} hours per night. Your usual bedtime is ${sleepData.averageBedtime} and you typically wake up at ${sleepData.averageWakeupTime}. ${sleepData.recommendations[0]}`,
-            sender: 'ai',
-            timestamp: new Date(),
-          };
-          
-          setMessages(prev => [...prev, aiMessage]);
-        }
-        else if (parsedResponse.action === "productivityInfo") {
-          const productivity = getProductivityPatterns();
-          const aiMessage: Message = {
-            id: Date.now().toString(),
-            text: `You're most productive during the ${productivity.mostProductiveTimeOfDay}, and ${productivity.mostProductiveDay} is your most productive day. Your average focus session lasts ${Math.round(productivity.averageFocusSessionLength)} minutes.`,
-            sender: 'ai',
-            timestamp: new Date(),
-          };
-          
-          setMessages(prev => [...prev, aiMessage]);
-        }
-        else {
-          // For other types of structured responses
-          const aiMessage: Message = {
-            id: Date.now().toString(),
-            text: parsedResponse.message || geminiResponse,
-            sender: 'ai',
-            timestamp: new Date(),
-          };
-          
-          setMessages(prev => [...prev, aiMessage]);
-        }
-      } catch (e) {
-        // If not valid JSON, use the full response
+        // Add the AI response
         const aiMessage: Message = {
           id: Date.now().toString(),
-          text: geminiResponse,
+          text: aiResponse,
           sender: 'ai',
           timestamp: new Date(),
         };
         
         setMessages(prev => [...prev, aiMessage]);
+        
+        // Close the chat after a short delay
+        setTimeout(() => {
+          setIsOpen(false);
+        }, 2000);
+        
+        return;
       }
-    } catch (error) {
-      // Handle error
-      const errorMessage: Message = {
+      
+      // Simple keyword matching for more contextual responses
+      const userMessageLower = userMessage.text.toLowerCase();
+      
+      if (userMessageLower.includes('plan') || userMessageLower.includes('schedule')) {
+        aiResponse = "Based on your current schedule, I recommend allocating 2-hour blocks for deep work in the morning, followed by meetings in the afternoon. This matches your natural energy patterns.";
+      } else if (userMessageLower.includes('meeting') || userMessageLower.includes('meetings')) {
+        aiResponse = "I noticed you have several meetings on Wednesday. Consider grouping them together with small breaks in between to preserve your focus time on other days.";
+      } else if (userMessageLower.includes('prioritize') || userMessageLower.includes('important')) {
+        aiResponse = "To prioritize effectively, I suggest using the Eisenhower Matrix: sort tasks into urgent/important, important/not urgent, urgent/not important, and neither. Focus on the important tasks first, regardless of urgency.";
+      } else if (userMessageLower.includes('focus') || userMessageLower.includes('concentrate')) {
+        aiResponse = "For better focus, try the 'deep work' approach. Block 90-minute sessions on your calendar, silence notifications, and work on a single task. Your concentration typically peaks around 10-11 AM based on your patterns.";
+      } else if (userMessageLower.includes('break') || userMessageLower.includes('rest')) {
+        aiResponse = "Strategic breaks improve productivity. I recommend a 5-minute break every 25 minutes, and a longer 30-minute break after 2 hours of work. This aligns with your natural attention cycles.";
+      } else if (userMessageLower.includes('template') || userMessageLower.includes('routine')) {
+        aiResponse = "Based on your work patterns, an ideal weekly template would have Mondays and Tuesdays for deep work, Wednesdays for meetings, Thursdays for planning and reviews, and Fridays for creative and collaborative work.";
+      } else {
+        // For any other message, generate a helpful response related to productivity and planning
+        const aiResponses = [
+          `I understand you're asking about "${userMessage.text}". Based on your past productivity patterns, I recommend scheduling your most challenging tasks between 9-11 AM when your focus tends to be strongest.`,
+          `Regarding "${userMessage.text}", you might want to consider time-blocking this activity in your calendar to ensure you have dedicated time for it.`,
+          `That's an interesting query about "${userMessage.text}". Looking at your calendar, you have a 2-hour gap on Thursday afternoon that would be perfect for working on this.`,
+          `I see you're interested in "${userMessage.text}". Analyzing your task completion patterns, you finish work most efficiently in the mornings, so consider planning this activity before noon.`,
+          `About "${userMessage.text}" - your current schedule shows some potential for time batching similar activities, which can reduce context switching and boost your productivity.`,
+        ];
+        
+        aiResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
+      }
+      
+      const aiMessage: Message = {
         id: Date.now().toString(),
-        text: "Sorry, I encountered an error. Please try again.",
+        text: aiResponse,
         sender: 'ai',
         timestamp: new Date(),
       };
       
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const toggleListening = () => {
-    if (!isVoiceSupported) {
-      toast({
-        title: "Not Supported",
-        description: "Speech recognition is not supported in your browser.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (isListening) {
-      stopListening();
-    } else {
-      startListening();
-    }
-  };
-
-  const startListening = () => {
-    setTranscript("");
-    setIsListening(true);
-    recognitionRef.current?.start();
-    
-    toast({
-      title: "Listening...",
-      description: "Speak now to give a command.",
-    });
-  };
-
-  const stopListening = () => {
-    setIsListening(false);
-    recognitionRef.current?.stop();
-  };
-
-  const processVoiceCommand = async (text: string) => {
-    // Add user message
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: text,
-      sender: 'user',
-      timestamp: new Date(),
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
-    setCurrentMessage('');
-    setIsProcessing(true);
-    
-    try {
-      // Call Gemini API - reusing same function as text input
-      const geminiResponse = await callGeminiApi(text);
-      
-      try {
-        // Try to parse as JSON
-        const parsedResponse = JSON.parse(geminiResponse);
-        
-        if (parsedResponse.action === "addTask") {
-          // Extract task details and add the task
-          addTask({
-            title: parsedResponse.title,
-            time: parsedResponse.time,
-            priority: parsedResponse.priority as 'high' | 'medium' | 'low',
-            completed: false,
-            date: new Date().toISOString().split('T')[0]
-          });
-          
-          const responseText = `Added task "${parsedResponse.title}" at ${parsedResponse.time} with ${parsedResponse.priority} priority.`;
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            text: responseText,
-            sender: 'ai',
-            timestamp: new Date(),
-          }]);
-          
-          // Text-to-speech response
-          if ('speechSynthesis' in window) {
-            const speech = new SpeechSynthesisUtterance(responseText);
-            speech.lang = 'en-US';
-            window.speechSynthesis.speak(speech);
-          }
-        } 
-        else if (parsedResponse.action === "sleepAnalysis") {
-          const sleepData = getSleepPatterns();
-          const responseText = `You sleep an average of ${sleepData.averageSleepHours.toFixed(1)} hours per night. Your usual bedtime is ${sleepData.averageBedtime} and you typically wake up at ${sleepData.averageWakeupTime}. ${sleepData.recommendations[0]}`;
-          
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            text: responseText,
-            sender: 'ai',
-            timestamp: new Date(),
-          }]);
-          
-          // Text-to-speech response
-          if ('speechSynthesis' in window) {
-            const speech = new SpeechSynthesisUtterance(responseText);
-            speech.lang = 'en-US';
-            window.speechSynthesis.speak(speech);
-          }
-        }
-        else if (parsedResponse.action === "productivityInfo") {
-          const productivity = getProductivityPatterns();
-          const responseText = `You're most productive during the ${productivity.mostProductiveTimeOfDay}, and ${productivity.mostProductiveDay} is your most productive day. Your average focus session lasts ${Math.round(productivity.averageFocusSessionLength)} minutes.`;
-          
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            text: responseText,
-            sender: 'ai',
-            timestamp: new Date(),
-          }]);
-          
-          // Text-to-speech response
-          if ('speechSynthesis' in window) {
-            const speech = new SpeechSynthesisUtterance(responseText);
-            speech.lang = 'en-US';
-            window.speechSynthesis.speak(speech);
-          }
-        }
-        else {
-          // For general responses
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            text: parsedResponse.message || geminiResponse,
-            sender: 'ai',
-            timestamp: new Date(),
-          }]);
-          
-          // Text-to-speech response
-          if ('speechSynthesis' in window) {
-            const speech = new SpeechSynthesisUtterance(parsedResponse.message || geminiResponse);
-            speech.lang = 'en-US';
-            window.speechSynthesis.speak(speech);
-          }
-        }
-      } catch (e) {
-        // If it's not valid JSON, just use the full response
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          text: geminiResponse,
-          sender: 'ai',
-          timestamp: new Date(),
-        }]);
-        
-        // Text-to-speech response
-        if ('speechSynthesis' in window) {
-          const speech = new SpeechSynthesisUtterance(geminiResponse);
-          speech.lang = 'en-US';
-          window.speechSynthesis.speak(speech);
-        }
-      }
-    } catch (error) {
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        text: "Sorry, I couldn't process that request. Please try again.",
-        sender: 'ai',
-        timestamp: new Date(),
-      }]);
-    } finally {
-      setIsProcessing(false);
-    }
+      setMessages(prev => [...prev, aiMessage]);
+    }, 1500);
   };
 
   const handleSuggestedPrompt = (prompt: string) => {
     setCurrentMessage(prompt);
+  };
+
+  const handleSuggestionResponse = () => {
+    if (!currentSuggestion) return;
+    
+    // Add the AI suggestion as a message
+    const suggestionMessage: Message = {
+      id: Date.now().toString(),
+      text: currentSuggestion,
+      sender: 'ai',
+      timestamp: new Date(),
+    };
+    
+    setMessages(prev => [...prev, suggestionMessage]);
+    setShowSuggestion(false);
+    setCurrentSuggestion('');
   };
 
   const toggleChat = () => {
@@ -504,39 +213,6 @@ const AiChatAssistant: React.FC = () => {
 
   return (
     <>
-      {/* API Key Dialog */}
-      <Dialog open={isApiKeyDialogOpen} onOpenChange={setIsApiKeyDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Set Gemini API Key</DialogTitle>
-            <DialogDescription>
-              Enter your Google Gemini API key to use with the assistant.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500">
-                Enter your Gemini API key. You can get one from the Google AI Studio.
-              </p>
-              <Input
-                value={tempApiKey}
-                onChange={(e) => setTempApiKey(e.target.value)}
-                placeholder="Enter your Gemini API key"
-                className="w-full"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setIsApiKeyDialogOpen(false)} variant="outline">
-              Cancel
-            </Button>
-            <Button onClick={saveApiKey} className="bg-blue-600 hover:bg-blue-700">
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Floating button */}
       <Button
         onClick={toggleChat}
@@ -546,26 +222,6 @@ const AiChatAssistant: React.FC = () => {
         )}
       >
         {!isOpen ? <Sparkles className="h-6 w-6" /> : <X className="h-6 w-6" />}
-      </Button>
-
-      {/* Voice control button */}
-      <Button
-        onClick={toggleListening}
-        className={cn(
-          "fixed bottom-6 right-24 h-12 w-12 rounded-full shadow-lg flex items-center justify-center p-0 z-50",
-          isListening ? "bg-red-600 hover:bg-red-700" : "bg-indigo-600 hover:bg-indigo-700"
-        )}
-      >
-        {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-      </Button>
-      
-      {/* API Settings button */}
-      <Button
-        onClick={() => setIsApiKeyDialogOpen(true)}
-        className="fixed bottom-6 right-40 h-12 w-12 rounded-full shadow-lg flex items-center justify-center p-0 z-50 bg-gray-600 hover:bg-gray-700"
-        title="Set API Key"
-      >
-        <Settings className="h-5 w-5" />
       </Button>
       
       {/* Chat panel */}
@@ -577,9 +233,9 @@ const AiChatAssistant: React.FC = () => {
           <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg py-3">
             <CardTitle className="text-base font-medium flex items-center gap-2">
               <Sparkles className="h-4 w-4" />
-              Gemini Assistant
+              AI Assistant
               <Badge variant="secondary" className="ml-auto bg-white/20 text-white hover:bg-white/30">
-                Powered by Google
+                Smart Suggestions
               </Badge>
             </CardTitle>
           </CardHeader>
@@ -615,12 +271,18 @@ const AiChatAssistant: React.FC = () => {
                   </div>
                 ))}
                 
-                {isProcessing && (
-                  <div className="flex justify-center">
-                    <div className="animate-pulse flex items-center justify-center gap-1">
-                      <div className="h-2 w-2 bg-blue-600 rounded-full"></div>
-                      <div className="h-2 w-2 bg-blue-600 rounded-full delay-75"></div>
-                      <div className="h-2 w-2 bg-blue-600 rounded-full delay-150"></div>
+                {/* Show AI suggestion if available */}
+                {showSuggestion && currentSuggestion && (
+                  <div className="flex items-start gap-2.5 animate-pulse">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-100">
+                      <Lightbulb className="h-4 w-4 text-amber-600" />
+                    </div>
+                    <div 
+                      className="max-w-[75%] p-3 rounded-lg text-sm bg-amber-50 text-amber-800 rounded-tl-none border border-amber-200 cursor-pointer hover:bg-amber-100 transition-colors"
+                      onClick={handleSuggestionResponse}
+                    >
+                      <p className="text-xs text-amber-600 font-medium mb-1">Suggestion:</p>
+                      {currentSuggestion}
                     </div>
                   </div>
                 )}
@@ -659,7 +321,7 @@ const AiChatAssistant: React.FC = () => {
               <Button 
                 size="icon" 
                 onClick={handleSendMessage}
-                disabled={!currentMessage.trim() || isProcessing}
+                disabled={!currentMessage.trim()}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 <Send className="h-4 w-4" />
