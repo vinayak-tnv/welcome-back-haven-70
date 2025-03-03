@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, User, Send, X, Sparkles, Calendar, Lightbulb } from 'lucide-react';
+import { Bot, User, Send, X, Sparkles, Calendar, Lightbulb, Mic, MicOff, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -8,12 +8,30 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { useTasks } from '@/context/TaskContext';
+import { useToast } from '@/hooks/use-toast';
 
 interface Message {
   id: string;
   text: string;
   sender: 'user' | 'ai';
   timestamp: Date;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onerror: (event: any) => void;
+  onresult: (event: any) => void;
+  onend: (event: any) => void;
+}
+
+interface Window {
+  SpeechRecognition: new () => SpeechRecognition;
+  webkitSpeechRecognition: new () => SpeechRecognition;
 }
 
 const initialMessages: Message[] = [
@@ -34,16 +52,23 @@ const suggestedPrompts = [
   "Generate a weekly planning template"
 ];
 
+// Use the provided API key directly
+const GEMINI_API_KEY = "AIzaSyBFT3XFk9GpPGxt70u9emdUbiDarUkL5fc";
+
 const AiChatAssistant: React.FC = () => {
-  const { addTask } = useTasks();
+  const { toast } = useToast();
+  const { addTask, getProductivityPatterns, getSleepPatterns } = useTasks();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [currentMessage, setCurrentMessage] = useState('');
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [currentSuggestion, setCurrentSuggestion] = useState('');
-  const [apiKey, setApiKey] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [isVoiceSupported, setIsVoiceSupported] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -53,12 +78,6 @@ const AiChatAssistant: React.FC = () => {
 
   // Load messages from localStorage on component mount
   useEffect(() => {
-    // Load API key from localStorage if available
-    const savedApiKey = localStorage.getItem('geminiApiKey');
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
-    }
-    
     const savedMessages = localStorage.getItem('aiChatMessages');
     if (savedMessages) {
       try {
@@ -73,7 +92,48 @@ const AiChatAssistant: React.FC = () => {
         console.error('Error parsing saved messages:', error);
       }
     }
-  }, []);
+    
+    // Initialize speech recognition
+    if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
+      setIsVoiceSupported(false);
+      return;
+    }
+
+    // Initialize speech recognition
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    recognitionRef.current = new SpeechRecognition();
+    recognitionRef.current.continuous = false;
+    recognitionRef.current.interimResults = false;
+    recognitionRef.current.lang = 'en-US';
+
+    recognitionRef.current.onresult = (event: any) => {
+      const current = event.resultIndex;
+      const transcriptText = event.results[current][0].transcript;
+      setTranscript(transcriptText);
+      setCurrentMessage(transcriptText);
+      processVoiceCommand(transcriptText);
+    };
+
+    recognitionRef.current.onerror = (event: any) => {
+      console.error('Speech recognition error', event.error);
+      toast({
+        title: "Voice Recognition Error",
+        description: `Error: ${event.error}. Please try again.`,
+        variant: "destructive"
+      });
+      setIsListening(false);
+    };
+
+    recognitionRef.current.onend = () => {
+      setIsListening(false);
+    };
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    };
+  }, [toast]);
 
   // Save messages to localStorage whenever they change
   useEffect(() => {
@@ -83,12 +143,9 @@ const AiChatAssistant: React.FC = () => {
   }, [messages]);
 
   const callGeminiApi = async (text: string): Promise<string> => {
-    if (!apiKey) {
-      return "API key is missing. Please provide a Gemini API key to continue.";
-    }
-
     try {
-      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+      // Updated to use Gemini 1.0 Pro endpoint
+      const url = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
       
       // Get the last 5 messages to provide context (excluding the current message)
       const recentMessages = messages.slice(-5).map(msg => ({
@@ -96,7 +153,7 @@ const AiChatAssistant: React.FC = () => {
         role: msg.sender === 'user' ? 'user' : 'model'
       }));
       
-      const response = await fetch(`${url}?key=${apiKey}`, {
+      const response = await fetch(`${url}?key=${GEMINI_API_KEY}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -112,6 +169,12 @@ const AiChatAssistant: React.FC = () => {
                 {"action": "addTask", "title": "Task title", "time": "HH:MM", "priority": "high/medium/low"}
                 
                 If the user is asking to generate a schedule or plan, provide useful advice formatted as a list.
+                
+                If the user is asking about sleep analysis:
+                {"action": "sleepAnalysis"}
+                
+                If the user is asking about productivity info:
+                {"action": "productivityInfo"}
                 
                 If it's any other type of request, respond in a helpful, concise way as an AI assistant focused on productivity.
                 
@@ -141,24 +204,8 @@ const AiChatAssistant: React.FC = () => {
     }
   };
 
-  const promptForApiKey = () => {
-    const key = prompt("Please enter your Gemini API key to continue:");
-    if (key) {
-      setApiKey(key);
-      localStorage.setItem('geminiApiKey', key);
-      return true;
-    } else {
-      return false;
-    }
-  };
-
   const handleSendMessage = async () => {
     if (!currentMessage.trim()) return;
-    
-    if (!apiKey) {
-      const keyProvided = promptForApiKey();
-      if (!keyProvided) return;
-    }
     
     // Add user message
     const userMessage: Message = {
@@ -200,7 +247,30 @@ const AiChatAssistant: React.FC = () => {
           };
           
           setMessages(prev => [...prev, aiMessage]);
-        } else {
+        } 
+        else if (parsedResponse.action === "sleepAnalysis") {
+          const sleepData = getSleepPatterns();
+          const aiMessage: Message = {
+            id: Date.now().toString(),
+            text: `You sleep an average of ${sleepData.averageSleepHours.toFixed(1)} hours per night. Your usual bedtime is ${sleepData.averageBedtime} and you typically wake up at ${sleepData.averageWakeupTime}. ${sleepData.recommendations[0]}`,
+            sender: 'ai',
+            timestamp: new Date(),
+          };
+          
+          setMessages(prev => [...prev, aiMessage]);
+        }
+        else if (parsedResponse.action === "productivityInfo") {
+          const productivity = getProductivityPatterns();
+          const aiMessage: Message = {
+            id: Date.now().toString(),
+            text: `You're most productive during the ${productivity.mostProductiveTimeOfDay}, and ${productivity.mostProductiveDay} is your most productive day. Your average focus session lasts ${Math.round(productivity.averageFocusSessionLength)} minutes.`,
+            sender: 'ai',
+            timestamp: new Date(),
+          };
+          
+          setMessages(prev => [...prev, aiMessage]);
+        }
+        else {
           // For other types of structured responses
           const aiMessage: Message = {
             id: Date.now().toString(),
@@ -237,16 +307,171 @@ const AiChatAssistant: React.FC = () => {
     }
   };
 
+  const toggleListening = () => {
+    if (!isVoiceSupported) {
+      toast({
+        title: "Not Supported",
+        description: "Speech recognition is not supported in your browser.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  const startListening = () => {
+    setTranscript("");
+    setIsListening(true);
+    recognitionRef.current?.start();
+    
+    toast({
+      title: "Listening...",
+      description: "Speak now to give a command.",
+    });
+  };
+
+  const stopListening = () => {
+    setIsListening(false);
+    recognitionRef.current?.stop();
+  };
+
+  const processVoiceCommand = async (text: string) => {
+    // Add user message
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: text,
+      sender: 'user',
+      timestamp: new Date(),
+    };
+    
+    setMessages(prev => [...prev, userMessage]);
+    setCurrentMessage('');
+    setIsProcessing(true);
+    
+    try {
+      // Call Gemini API - reusing same function as text input
+      const geminiResponse = await callGeminiApi(text);
+      
+      try {
+        // Try to parse as JSON
+        const parsedResponse = JSON.parse(geminiResponse);
+        
+        if (parsedResponse.action === "addTask") {
+          // Extract task details and add the task
+          addTask({
+            title: parsedResponse.title,
+            time: parsedResponse.time,
+            priority: parsedResponse.priority as 'high' | 'medium' | 'low',
+            completed: false,
+            date: new Date().toISOString().split('T')[0]
+          });
+          
+          const responseText = `Added task "${parsedResponse.title}" at ${parsedResponse.time} with ${parsedResponse.priority} priority.`;
+          setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            text: responseText,
+            sender: 'ai',
+            timestamp: new Date(),
+          }]);
+          
+          // Text-to-speech response
+          if ('speechSynthesis' in window) {
+            const speech = new SpeechSynthesisUtterance(responseText);
+            speech.lang = 'en-US';
+            window.speechSynthesis.speak(speech);
+          }
+        } 
+        else if (parsedResponse.action === "sleepAnalysis") {
+          const sleepData = getSleepPatterns();
+          const responseText = `You sleep an average of ${sleepData.averageSleepHours.toFixed(1)} hours per night. Your usual bedtime is ${sleepData.averageBedtime} and you typically wake up at ${sleepData.averageWakeupTime}. ${sleepData.recommendations[0]}`;
+          
+          setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            text: responseText,
+            sender: 'ai',
+            timestamp: new Date(),
+          }]);
+          
+          // Text-to-speech response
+          if ('speechSynthesis' in window) {
+            const speech = new SpeechSynthesisUtterance(responseText);
+            speech.lang = 'en-US';
+            window.speechSynthesis.speak(speech);
+          }
+        }
+        else if (parsedResponse.action === "productivityInfo") {
+          const productivity = getProductivityPatterns();
+          const responseText = `You're most productive during the ${productivity.mostProductiveTimeOfDay}, and ${productivity.mostProductiveDay} is your most productive day. Your average focus session lasts ${Math.round(productivity.averageFocusSessionLength)} minutes.`;
+          
+          setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            text: responseText,
+            sender: 'ai',
+            timestamp: new Date(),
+          }]);
+          
+          // Text-to-speech response
+          if ('speechSynthesis' in window) {
+            const speech = new SpeechSynthesisUtterance(responseText);
+            speech.lang = 'en-US';
+            window.speechSynthesis.speak(speech);
+          }
+        }
+        else {
+          // For general responses
+          setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            text: parsedResponse.message || geminiResponse,
+            sender: 'ai',
+            timestamp: new Date(),
+          }]);
+          
+          // Text-to-speech response
+          if ('speechSynthesis' in window) {
+            const speech = new SpeechSynthesisUtterance(parsedResponse.message || geminiResponse);
+            speech.lang = 'en-US';
+            window.speechSynthesis.speak(speech);
+          }
+        }
+      } catch (e) {
+        // If it's not valid JSON, just use the full response
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          text: geminiResponse,
+          sender: 'ai',
+          timestamp: new Date(),
+        }]);
+        
+        // Text-to-speech response
+        if ('speechSynthesis' in window) {
+          const speech = new SpeechSynthesisUtterance(geminiResponse);
+          speech.lang = 'en-US';
+          window.speechSynthesis.speak(speech);
+        }
+      }
+    } catch (error) {
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        text: "Sorry, I couldn't process that request. Please try again.",
+        sender: 'ai',
+        timestamp: new Date(),
+      }]);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleSuggestedPrompt = (prompt: string) => {
     setCurrentMessage(prompt);
   };
 
   const toggleChat = () => {
     setIsOpen(!isOpen);
-    
-    if (isOpen && !apiKey) {
-      promptForApiKey();
-    }
   };
 
   return (
@@ -260,6 +485,17 @@ const AiChatAssistant: React.FC = () => {
         )}
       >
         {!isOpen ? <Sparkles className="h-6 w-6" /> : <X className="h-6 w-6" />}
+      </Button>
+
+      {/* Voice control button */}
+      <Button
+        onClick={toggleListening}
+        className={cn(
+          "fixed bottom-6 right-24 h-12 w-12 rounded-full shadow-lg flex items-center justify-center p-0 z-50",
+          isListening ? "bg-red-600 hover:bg-red-700" : "bg-indigo-600 hover:bg-indigo-700"
+        )}
+      >
+        {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
       </Button>
       
       {/* Chat panel */}

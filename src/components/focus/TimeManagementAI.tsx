@@ -43,12 +43,14 @@ const suggestedPrompts = [
   "How long should my breaks be?"
 ];
 
+// Use the provided API key directly
+const GEMINI_API_KEY = "AIzaSyBFT3XFk9GpPGxt70u9emdUbiDarUkL5fc";
+
 const TimeManagementAI: React.FC = () => {
   const { getProductivityPatterns, timeEntries } = useTasks();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [currentMessage, setCurrentMessage] = useState('');
-  const [apiKey, setApiKey] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
@@ -58,14 +60,8 @@ const TimeManagementAI: React.FC = () => {
     }
   }, [messages]);
 
-  // Load API key and messages from localStorage on component mount
+  // Load messages from localStorage on component mount
   useEffect(() => {
-    // Load API key from localStorage if available
-    const savedApiKey = localStorage.getItem('geminiApiKey');
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
-    }
-    
     const savedMessages = localStorage.getItem('timeAIMessages');
     if (savedMessages) {
       try {
@@ -90,12 +86,9 @@ const TimeManagementAI: React.FC = () => {
   }, [messages]);
 
   const callGeminiApi = async (text: string): Promise<string> => {
-    if (!apiKey) {
-      return "API key is missing. Please provide a Gemini API key to continue.";
-    }
-
     try {
-      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+      // Updated to use Gemini 1.0 Pro endpoint
+      const url = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
       
       // Get productivity patterns to provide context
       const patterns = getProductivityPatterns();
@@ -106,7 +99,7 @@ const TimeManagementAI: React.FC = () => {
         role: msg.sender === 'user' ? 'user' : 'model'
       }));
       
-      const response = await fetch(`${url}?key=${apiKey}`, {
+      const response = await fetch(`${url}?key=${GEMINI_API_KEY}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -151,24 +144,8 @@ const TimeManagementAI: React.FC = () => {
     }
   };
 
-  const promptForApiKey = () => {
-    const key = prompt("Please enter your Gemini API key to continue:");
-    if (key) {
-      setApiKey(key);
-      localStorage.setItem('geminiApiKey', key);
-      return true;
-    } else {
-      return false;
-    }
-  };
-
   const handleSendMessage = async () => {
     if (!currentMessage.trim()) return;
-    
-    if (!apiKey) {
-      const keyProvided = promptForApiKey();
-      if (!keyProvided) return;
-    }
     
     // Add user message
     const userMessage: Message = {
@@ -216,10 +193,6 @@ const TimeManagementAI: React.FC = () => {
 
   const toggleChat = () => {
     setIsOpen(!isOpen);
-    
-    if (isOpen && !apiKey) {
-      promptForApiKey();
-    }
   };
 
   return (
