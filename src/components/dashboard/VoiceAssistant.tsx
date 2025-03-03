@@ -1,11 +1,23 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Sparkles, Loader2 } from 'lucide-react';
+import { Mic, MicOff, Sparkles, Loader2, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useTasks } from '@/context/TaskContext';
 import { useToast } from '@/hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface SpeechRecognition extends EventTarget {
   continuous: boolean;
@@ -30,6 +42,9 @@ const VoiceAssistant: React.FC = () => {
   const [response, setResponse] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
+  const [apiKey, setApiKey] = useState(() => {
+    return localStorage.getItem('geminiApiKey') || '';
+  });
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const { toast } = useToast();
   const { addTask, getProductivityPatterns, getSleepPatterns } = useTasks();
@@ -86,6 +101,15 @@ const VoiceAssistant: React.FC = () => {
       return;
     }
 
+    if (!apiKey) {
+      toast({
+        title: "API Key Missing",
+        description: "Please set your Gemini API key in settings first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (isListening) {
       stopListening();
     } else {
@@ -110,29 +134,87 @@ const VoiceAssistant: React.FC = () => {
     recognitionRef.current?.stop();
   };
 
-  const processVoiceCommand = (text: string) => {
+  const processVoiceCommand = async (text: string) => {
     setIsProcessing(true);
-    const lowerText = text.toLowerCase();
+    
+    try {
+      // Get context data for the AI
+      const sleepData = getSleepPatterns();
+      const productivityData = getProductivityPatterns();
+      
+      // Create a context-rich prompt for Gemini
+      const prompt = `
+As an AI assistant for a productivity app, respond to this user command: "${text}"
 
-    // Simple NLP - command detection
-    setTimeout(() => {
+Here is some context about the user:
+- Sleep data: Average sleep is ${sleepData.averageSleepHours.toFixed(1)} hours, bedtime ${sleepData.averageBedtime}, wakeup ${sleepData.averageWakeupTime}
+- Productivity: Most productive during ${productivityData.mostProductiveTimeOfDay}, best day is ${productivityData.mostProductiveDay}
+- Focus sessions average ${Math.round(productivityData.averageFocusSessionLength)} minutes
+
+Task-related commands format: If the user is asking to add/create a task, extract:
+1. Task title (what the task is)
+2. Time (if mentioned, default to "09:00")
+3. Priority (if mentioned, default to "medium")
+
+For commands about sleep or productivity, provide a brief data-based insight.
+Keep responses concise and actionable.
+`;
+
+      // Call Gemini API
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: prompt }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 300,
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error?.message || "Failed to get response from Gemini API");
+      }
+
+      // Extract the response text
       let responseText = "";
-
-      // Add task command
-      if (lowerText.includes("add task") || lowerText.includes("create task") || lowerText.includes("new task")) {
-        const titleMatch = text.match(/(?:add|create|new)\s+task\s+(?:called|named|titled)?\s*["']?([^"']+)["']?/i);
-        const title = titleMatch ? titleMatch[1] : "New task";
+      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+        responseText = data.candidates[0].content.parts[0].text;
+      } else {
+        responseText = "Sorry, I couldn't generate a proper response.";
+      }
+      
+      setResponse(responseText);
+      
+      // Check if the response contains task details we can parse
+      const taskMatch = responseText.match(/add(?:ed|ing)?\s+task\s+["']?([^"']+)["']?/i);
+      if (taskMatch) {
+        const title = taskMatch[1].trim();
         
-        // Extract time
-        const timeMatch = text.match(/at\s+(\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)/i);
+        // Look for time
+        const timeMatch = responseText.match(/at\s+(\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)/i);
         const time = timeMatch ? convertToTime(timeMatch[1]) : "09:00";
         
-        // Extract priority
+        // Look for priority
         let priority: 'high' | 'medium' | 'low' = 'medium';
-        if (lowerText.includes("high priority") || lowerText.includes("important")) priority = 'high';
-        if (lowerText.includes("low priority") || lowerText.includes("not important")) priority = 'low';
+        if (responseText.toLowerCase().includes("high priority")) priority = 'high';
+        if (responseText.toLowerCase().includes("low priority")) priority = 'low';
         
-        // Create task
+        // Add the task
         addTask({
           title,
           time,
@@ -140,26 +222,7 @@ const VoiceAssistant: React.FC = () => {
           completed: false,
           date: new Date().toISOString().split('T')[0]
         });
-        
-        responseText = `Added task "${title}" at ${time} with ${priority} priority.`;
       }
-      // Sleep analysis command
-      else if (lowerText.includes("sleep") && (lowerText.includes("analysis") || lowerText.includes("pattern") || lowerText.includes("report"))) {
-        const sleepData = getSleepPatterns();
-        responseText = `You sleep an average of ${sleepData.averageSleepHours.toFixed(1)} hours per night. Your usual bedtime is ${sleepData.averageBedtime} and you typically wake up at ${sleepData.averageWakeupTime}. ${sleepData.recommendations[0]}`;
-      }
-      // Productivity command 
-      else if (lowerText.includes("productivity") || (lowerText.includes("how") && lowerText.includes("productive"))) {
-        const productivity = getProductivityPatterns();
-        responseText = `You're most productive during the ${productivity.mostProductiveTimeOfDay}, and ${productivity.mostProductiveDay} is your most productive day. Your average focus session lasts ${Math.round(productivity.averageFocusSessionLength)} minutes.`;
-      }
-      // Fallback
-      else {
-        responseText = "I'm sorry, I didn't understand that command. You can ask me to add tasks, analyze sleep patterns, or check productivity.";
-      }
-
-      setResponse(responseText);
-      setIsProcessing(false);
       
       // Text-to-speech response
       if ('speechSynthesis' in window) {
@@ -167,7 +230,19 @@ const VoiceAssistant: React.FC = () => {
         speech.lang = 'en-US';
         window.speechSynthesis.speak(speech);
       }
-    }, 1000);
+      
+    } catch (error) {
+      console.error("Error processing with Gemini:", error);
+      setResponse("Sorry, there was an error processing your request with Gemini. Please check your API key and try again.");
+      
+      toast({
+        title: "Gemini API Error",
+        description: error instanceof Error ? error.message : "Failed to communicate with Gemini API",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Convert various time formats to 24h format
@@ -206,16 +281,67 @@ const VoiceAssistant: React.FC = () => {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   };
 
+  const handleApiKeySave = (newApiKey: string) => {
+    setApiKey(newApiKey);
+    localStorage.setItem('geminiApiKey', newApiKey);
+    toast({
+      title: "API Key Saved",
+      description: "Your Gemini API key has been saved.",
+    });
+  };
+
   return (
     <div className="fixed bottom-6 left-24 z-50">
-      <Button 
-        onClick={toggleListening}
-        className={`h-14 w-14 rounded-full shadow-lg flex items-center justify-center p-0 ${
-          isListening ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'
-        }`}
-      >
-        {isListening ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-      </Button>
+      <div className="flex flex-col items-center gap-2">
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button 
+              variant="outline" 
+              size="icon" 
+              className="rounded-full h-8 w-8"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Gemini API Settings</DialogTitle>
+              <DialogDescription>
+                Enter your Gemini API key to enable AI voice assistant. You can get an API key from Google AI Studio.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="apiKey">API Key</Label>
+                <Input 
+                  id="apiKey" 
+                  type="password" 
+                  placeholder="Enter your Gemini API key" 
+                  defaultValue={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Your API key is stored locally in your browser and never sent to our servers.
+              </div>
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button onClick={() => handleApiKeySave(apiKey)}>Save</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        <Button 
+          onClick={toggleListening}
+          className={`h-14 w-14 rounded-full shadow-lg flex items-center justify-center p-0 ${
+            isListening ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'
+          }`}
+        >
+          {isListening ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+        </Button>
+      </div>
       
       {(transcript || response) && (
         <Card className="absolute bottom-16 -left-32 w-80 shadow-lg transition-all duration-300 transform">
@@ -235,7 +361,7 @@ const VoiceAssistant: React.FC = () => {
             
             {response && (
               <div className="space-y-1">
-                <Badge variant="outline" className="bg-indigo-100 text-indigo-700">Assistant:</Badge>
+                <Badge variant="outline" className="bg-indigo-100 text-indigo-700">Gemini:</Badge>
                 <p className="text-sm">{response}</p>
               </div>
             )}

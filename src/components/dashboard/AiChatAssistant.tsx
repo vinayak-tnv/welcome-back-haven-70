@@ -1,12 +1,24 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, User, Send, X, Sparkles, Calendar, Lightbulb } from 'lucide-react';
+import { Bot, User, Send, X, Sparkles, Calendar, Lightbulb, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Label } from '@/components/ui/label';
 
 interface Message {
   id: string;
@@ -18,7 +30,7 @@ interface Message {
 const initialMessages: Message[] = [
   {
     id: '1',
-    text: "Hello! I'm your AI assistant. I can help you with scheduling, planning, and provide suggestions for your day. How can I help you today?",
+    text: "Hello! I'm your Gemini-powered AI assistant. I can help you with scheduling, planning, and provide suggestions for your day. How can I help you today?",
     sender: 'ai',
     timestamp: new Date(),
   },
@@ -33,23 +45,17 @@ const suggestedPrompts = [
   "Generate a weekly planning template"
 ];
 
-// Premade suggestions that the AI will provide periodically
-const aiSuggestions = [
-  "Did you know that scheduling your most challenging tasks during your peak energy hours can boost productivity by up to 30%?",
-  "Consider using the Pomodoro Technique: work for 25 minutes, then take a 5-minute break to maintain focus and energy.",
-  "Research shows that short breaks between meetings can reduce stress and improve decision-making. Try adding 5-10 minute buffers.",
-  "For better work-life balance, try scheduling personal activities with the same priority as work tasks.",
-  "Morning routines have been linked to improved productivity. Consider establishing a consistent start to your day.",
-  "Try time-blocking your schedule to reduce context switching, which can waste up to 40% of your productive time.",
-  "Scheduling dedicated 'no meeting' days can increase deep work output by allowing for longer periods of uninterrupted focus."
-];
-
 const AiChatAssistant: React.FC = () => {
+  const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [currentMessage, setCurrentMessage] = useState('');
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [currentSuggestion, setCurrentSuggestion] = useState('');
+  const [apiKey, setApiKey] = useState(() => {
+    return localStorage.getItem('geminiApiKey') || '';
+  });
+  const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
@@ -94,21 +100,79 @@ const AiChatAssistant: React.FC = () => {
       const timeElapsed = new Date().getTime() - lastMessageTime.getTime();
       
       if (timeElapsed > 10000 && !showSuggestion) {
-        const randomSuggestion = aiSuggestions[Math.floor(Math.random() * aiSuggestions.length)];
-        setCurrentSuggestion(randomSuggestion);
-        setShowSuggestion(true);
+        callGeminiForSuggestion();
       }
     }, 15000);
     
     return () => clearTimeout(suggestionTimer);
-  }, [isOpen, messages, showSuggestion]);
+  }, [isOpen, messages, showSuggestion, apiKey]);
 
-  const handleSendMessage = () => {
+  const callGeminiForSuggestion = async () => {
+    if (!apiKey) return;
+    
+    try {
+      const prompt = `
+As an AI assistant for a productivity app, generate ONE short productivity tip or insight.
+Make it concise (1-2 sentences), actionable, and evidence-based.
+Examples of good suggestions:
+- "Did you know that scheduling challenging tasks during your peak energy hours can boost productivity by up to 30%?"
+- "Consider using the Pomodoro Technique: 25 minutes of focused work followed by a 5-minute break can improve concentration."
+- "Research shows that short breaks between meetings reduce stress and improve decision-making. Try adding 5-10 minute buffers."
+`;
+
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: prompt }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 100,
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.error("Gemini API error:", data);
+        return;
+      }
+
+      // Extract the suggestion text
+      let suggestionText = "";
+      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+        suggestionText = data.candidates[0].content.parts[0].text.trim();
+        setCurrentSuggestion(suggestionText);
+        setShowSuggestion(true);
+      }
+    } catch (error) {
+      console.error("Error getting Gemini suggestion:", error);
+    }
+  };
+
+  const handleSendMessage = async () => {
     if (!currentMessage.trim()) return;
     
-    // Check if the message is a thank you message
-    const thankYouRegex = /\b(thank\s?you|thanks)\b/i;
-    const isThankYou = thankYouRegex.test(currentMessage.toLowerCase());
+    if (!apiKey) {
+      toast({
+        title: "API Key Missing",
+        description: "Please set your Gemini API key in settings first.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     // Add user message
     const userMessage: Message = {
@@ -121,70 +185,95 @@ const AiChatAssistant: React.FC = () => {
     setMessages(prev => [...prev, userMessage]);
     setCurrentMessage('');
     setShowSuggestion(false); // Hide any suggestion when user sends a message
+    setIsWaitingForResponse(true);
     
-    // Simulate AI response after a short delay
-    setTimeout(() => {
-      let aiResponse = '';
+    try {
+      // Create a context-rich prompt by including previous messages
+      const conversationContext = messages
+        .slice(-5) // Take last 5 messages for context
+        .map(m => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`)
+        .join('\n');
       
-      // If the message is a thank you, provide a closing message and close the chat
-      if (isThankYou) {
-        aiResponse = "You're welcome! I'm glad I could help. Feel free to reach out again if you need any assistance with your planning. Have a great day!";
-        
-        // Add the AI response
-        const aiMessage: Message = {
-          id: Date.now().toString(),
-          text: aiResponse,
-          sender: 'ai',
-          timestamp: new Date(),
-        };
-        
-        setMessages(prev => [...prev, aiMessage]);
-        
-        // Close the chat after a short delay
-        setTimeout(() => {
-          setIsOpen(false);
-        }, 2000);
-        
-        return;
+      const prompt = `
+You are an AI assistant for a productivity app, focused on helping users with time management, scheduling, and planning. 
+Respond to the user's latest message below. Be helpful, concise, and provide actionable advice.
+
+Previous conversation for context:
+${conversationContext}
+
+User's latest message: ${userMessage.text}
+
+Respond in a friendly, conversational tone. Keep your response under 200 words. If the user asks about scheduling, planning, or productivity concepts, provide evidence-based advice.
+`;
+
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: prompt }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.4,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 500,
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error?.message || "Failed to get response from Gemini API");
       }
-      
-      // Simple keyword matching for more contextual responses
-      const userMessageLower = userMessage.text.toLowerCase();
-      
-      if (userMessageLower.includes('plan') || userMessageLower.includes('schedule')) {
-        aiResponse = "Based on your current schedule, I recommend allocating 2-hour blocks for deep work in the morning, followed by meetings in the afternoon. This matches your natural energy patterns.";
-      } else if (userMessageLower.includes('meeting') || userMessageLower.includes('meetings')) {
-        aiResponse = "I noticed you have several meetings on Wednesday. Consider grouping them together with small breaks in between to preserve your focus time on other days.";
-      } else if (userMessageLower.includes('prioritize') || userMessageLower.includes('important')) {
-        aiResponse = "To prioritize effectively, I suggest using the Eisenhower Matrix: sort tasks into urgent/important, important/not urgent, urgent/not important, and neither. Focus on the important tasks first, regardless of urgency.";
-      } else if (userMessageLower.includes('focus') || userMessageLower.includes('concentrate')) {
-        aiResponse = "For better focus, try the 'deep work' approach. Block 90-minute sessions on your calendar, silence notifications, and work on a single task. Your concentration typically peaks around 10-11 AM based on your patterns.";
-      } else if (userMessageLower.includes('break') || userMessageLower.includes('rest')) {
-        aiResponse = "Strategic breaks improve productivity. I recommend a 5-minute break every 25 minutes, and a longer 30-minute break after 2 hours of work. This aligns with your natural attention cycles.";
-      } else if (userMessageLower.includes('template') || userMessageLower.includes('routine')) {
-        aiResponse = "Based on your work patterns, an ideal weekly template would have Mondays and Tuesdays for deep work, Wednesdays for meetings, Thursdays for planning and reviews, and Fridays for creative and collaborative work.";
+
+      // Extract the response text
+      let responseText = "";
+      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+        responseText = data.candidates[0].content.parts[0].text.trim();
       } else {
-        // For any other message, generate a helpful response related to productivity and planning
-        const aiResponses = [
-          `I understand you're asking about "${userMessage.text}". Based on your past productivity patterns, I recommend scheduling your most challenging tasks between 9-11 AM when your focus tends to be strongest.`,
-          `Regarding "${userMessage.text}", you might want to consider time-blocking this activity in your calendar to ensure you have dedicated time for it.`,
-          `That's an interesting query about "${userMessage.text}". Looking at your calendar, you have a 2-hour gap on Thursday afternoon that would be perfect for working on this.`,
-          `I see you're interested in "${userMessage.text}". Analyzing your task completion patterns, you finish work most efficiently in the mornings, so consider planning this activity before noon.`,
-          `About "${userMessage.text}" - your current schedule shows some potential for time batching similar activities, which can reduce context switching and boost your productivity.`,
-        ];
-        
-        aiResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
+        responseText = "Sorry, I couldn't generate a proper response. Please try again later.";
       }
       
+      // Add AI message
       const aiMessage: Message = {
         id: Date.now().toString(),
-        text: aiResponse,
+        text: responseText,
         sender: 'ai',
         timestamp: new Date(),
       };
       
       setMessages(prev => [...prev, aiMessage]);
-    }, 1500);
+      
+    } catch (error) {
+      console.error("Error communicating with Gemini API:", error);
+      
+      // Add error message
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        text: "Sorry, there was an error communicating with the Gemini API. Please check your API key and try again.",
+        sender: 'ai',
+        timestamp: new Date(),
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+      
+      toast({
+        title: "Gemini API Error",
+        description: error instanceof Error ? error.message : "Failed to communicate with Gemini API",
+        variant: "destructive"
+      });
+    } finally {
+      setIsWaitingForResponse(false);
+    }
   };
 
   const handleSuggestedPrompt = (prompt: string) => {
@@ -211,6 +300,27 @@ const AiChatAssistant: React.FC = () => {
     setIsOpen(!isOpen);
   };
 
+  const handleApiKeySave = (newApiKey: string) => {
+    setApiKey(newApiKey);
+    localStorage.setItem('geminiApiKey', newApiKey);
+    toast({
+      title: "API Key Saved",
+      description: "Your Gemini API key has been saved.",
+    });
+    
+    // If this is the first time setting the key, update the messages
+    if (!apiKey && newApiKey) {
+      const updatedMessages = [...messages];
+      if (updatedMessages.length === 1 && updatedMessages[0].id === '1') {
+        updatedMessages[0] = {
+          ...updatedMessages[0],
+          text: "Hello! I'm your Gemini-powered AI assistant. I can help you with scheduling, planning, and provide suggestions for your day. How can I help you today?"
+        };
+        setMessages(updatedMessages);
+      }
+    }
+  };
+
   return (
     <>
       {/* Floating button */}
@@ -233,10 +343,46 @@ const AiChatAssistant: React.FC = () => {
           <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg py-3">
             <CardTitle className="text-base font-medium flex items-center gap-2">
               <Sparkles className="h-4 w-4" />
-              AI Assistant
+              Gemini Assistant
               <Badge variant="secondary" className="ml-auto bg-white/20 text-white hover:bg-white/30">
-                Smart Suggestions
+                AI Powered
               </Badge>
+              
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-white hover:bg-white/20">
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Gemini API Settings</DialogTitle>
+                    <DialogDescription>
+                      Enter your Gemini API key to enable AI features. You can get an API key from Google AI Studio.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="chatApiKey">API Key</Label>
+                      <Input 
+                        id="chatApiKey" 
+                        type="password" 
+                        placeholder="Enter your Gemini API key" 
+                        defaultValue={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                      />
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Your API key is stored locally in your browser and never sent to our servers.
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button onClick={() => handleApiKeySave(apiKey)}>Save</Button>
+                    </DialogClose>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -270,6 +416,23 @@ const AiChatAssistant: React.FC = () => {
                     </div>
                   </div>
                 ))}
+                
+                {/* Show AI loading indicator */}
+                {isWaitingForResponse && (
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-100">
+                      <Bot className="h-4 w-4 text-gray-600" />
+                    </div>
+                    <div className="max-w-[75%] p-3 rounded-lg text-sm bg-gray-100 text-gray-800 rounded-tl-none flex items-center gap-2">
+                      <span>Thinking</span>
+                      <span className="flex space-x-1">
+                        <span className="animate-bounce delay-0 h-1.5 w-1.5 rounded-full bg-gray-400"></span>
+                        <span className="animate-bounce delay-150 h-1.5 w-1.5 rounded-full bg-gray-400"></span>
+                        <span className="animate-bounce delay-300 h-1.5 w-1.5 rounded-full bg-gray-400"></span>
+                      </span>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Show AI suggestion if available */}
                 {showSuggestion && currentSuggestion && (
@@ -312,19 +475,24 @@ const AiChatAssistant: React.FC = () => {
           <CardFooter className="p-3 border-t">
             <div className="flex w-full items-center gap-2">
               <Input
-                placeholder="Ask me anything about scheduling..."
+                placeholder={apiKey ? "Ask me anything about scheduling..." : "Set API key first..."}
                 value={currentMessage}
                 onChange={(e) => setCurrentMessage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                onKeyDown={(e) => e.key === 'Enter' && !isWaitingForResponse && handleSendMessage()}
                 className="flex-1"
+                disabled={isWaitingForResponse || !apiKey}
               />
               <Button 
                 size="icon" 
                 onClick={handleSendMessage}
-                disabled={!currentMessage.trim()}
+                disabled={!currentMessage.trim() || isWaitingForResponse || !apiKey}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                <Send className="h-4 w-4" />
+                {isWaitingForResponse ? (
+                  <span className="animate-spin"><Loader2 className="h-4 w-4" /></span>
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </CardFooter>

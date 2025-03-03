@@ -9,7 +9,9 @@ import {
   Clock, 
   BarChart3, 
   Calendar, 
-  Zap
+  Zap,
+  Loader2,
+  Settings 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +20,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { useTasks } from '@/context/TaskContext';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Label } from '@/components/ui/label';
 
 interface Message {
   id: string;
@@ -29,7 +43,7 @@ interface Message {
 const initialMessages: Message[] = [
   {
     id: '1',
-    text: "I'm your Time Management Assistant. I analyze your work patterns and can recommend optimal schedules. What would you like to know about your productivity?",
+    text: "I'm your Gemini-powered Time Management Assistant. I analyze your work patterns and can recommend optimal schedules. What would you like to know about your productivity?",
     sender: 'ai',
     timestamp: new Date(),
   },
@@ -45,12 +59,17 @@ const suggestedPrompts = [
 ];
 
 const TimeManagementAI: React.FC = () => {
+  const { toast } = useToast();
   const { getProductivityPatterns, timeEntries } = useTasks();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [currentMessage, setCurrentMessage] = useState('');
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [currentSuggestion, setCurrentSuggestion] = useState('');
+  const [apiKey, setApiKey] = useState(() => {
+    return localStorage.getItem('geminiApiKey') || '';
+  });
+  const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
@@ -86,7 +105,7 @@ const TimeManagementAI: React.FC = () => {
 
   // Send periodic productivity insights if we have data
   useEffect(() => {
-    if (!isOpen || timeEntries.length === 0) return;
+    if (!isOpen || timeEntries.length === 0 || !apiKey) return;
     
     const suggestionTimer = setTimeout(() => {
       // Only show suggestions if there's a gap in conversation (at least 10 seconds since last message)
@@ -94,29 +113,89 @@ const TimeManagementAI: React.FC = () => {
       const timeElapsed = new Date().getTime() - lastMessageTime.getTime();
       
       if (timeElapsed > 15000 && !showSuggestion) {
-        const patterns = getProductivityPatterns();
-        const suggestions = [
-          `I've noticed you're most productive during the ${patterns.mostProductiveTimeOfDay}. Consider scheduling your most important tasks during this time.`,
-          `Your average focus session is ${Math.round(patterns.averageFocusSessionLength)} minutes. Research suggests taking a 5-minute break after every 25 minutes of focused work.`,
-          `You complete about ${Math.round(patterns.completionRate)}% of your scheduled tasks. Setting more realistic time estimates could help improve this rate.`,
-          `${patterns.mostProductiveDay} appears to be your most productive day. Consider scheduling important tasks for this day of the week.`,
-          `You've spent a total of ${Math.round(patterns.totalTimeSpent)} minutes on tracked activities. Regular tracking helps identify where your time is going.`
-        ];
-        
-        // Only show if we have meaningful data
-        if (patterns.totalTimeSpent > 0) {
-          const randomSuggestion = suggestions[Math.floor(Math.random() * suggestions.length)];
-          setCurrentSuggestion(randomSuggestion);
-          setShowSuggestion(true);
-        }
+        generateProductivityInsight();
       }
     }, 15000);
     
     return () => clearTimeout(suggestionTimer);
-  }, [isOpen, messages, showSuggestion, getProductivityPatterns, timeEntries.length]);
+  }, [isOpen, messages, showSuggestion, timeEntries.length, apiKey]);
 
-  const handleSendMessage = () => {
+  const generateProductivityInsight = async () => {
+    if (timeEntries.length === 0 || !apiKey) return;
+    
+    try {
+      const patterns = getProductivityPatterns();
+      
+      const prompt = `
+As an AI assistant for a productivity app, generate ONE short, personalized insight based on the following user data:
+
+- Most productive time of day: ${patterns.mostProductiveTimeOfDay}
+- Most productive day of the week: ${patterns.mostProductiveDay}
+- Average focus session length: ${Math.round(patterns.averageFocusSessionLength)} minutes
+- Task completion rate: ${Math.round(patterns.completionRate)}%
+- Total tracked time: ${Math.round(patterns.totalTimeSpent)} minutes
+
+Provide a single, specific insight or actionable tip (1-2 sentences) based on ONE of these data points.
+Make it personalized, evidence-based, and directly connected to the data provided.
+`;
+
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: prompt }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 100,
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.error("Gemini API error:", data);
+        return;
+      }
+
+      // Extract the suggestion text
+      let suggestionText = "";
+      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+        suggestionText = data.candidates[0].content.parts[0].text.trim();
+        
+        // Only set if we have meaningful data
+        if (patterns.totalTimeSpent > 0) {
+          setCurrentSuggestion(suggestionText);
+          setShowSuggestion(true);
+        }
+      }
+    } catch (error) {
+      console.error("Error generating productivity insight:", error);
+    }
+  };
+
+  const handleSendMessage = async () => {
     if (!currentMessage.trim()) return;
+    
+    if (!apiKey) {
+      toast({
+        title: "API Key Missing",
+        description: "Please set your Gemini API key in settings first.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     // Add user message
     const userMessage: Message = {
@@ -129,61 +208,108 @@ const TimeManagementAI: React.FC = () => {
     setMessages(prev => [...prev, userMessage]);
     setCurrentMessage('');
     setShowSuggestion(false); // Hide any suggestion when user sends a message
+    setIsWaitingForResponse(true);
     
-    // Get productivity patterns
-    const patterns = getProductivityPatterns();
-    
-    // Simulate AI response after a short delay
-    setTimeout(() => {
-      let aiResponse = '';
-      const userMessageLower = userMessage.text.toLowerCase();
+    try {
+      // Get productivity patterns for context
+      const patterns = getProductivityPatterns();
       
-      // Check for common queries
-      if (userMessageLower.includes('productive') || userMessageLower.includes('productivity')) {
-        aiResponse = `Based on your data, you're most productive during the ${patterns.mostProductiveTimeOfDay}, and ${patterns.mostProductiveDay} is your most productive day of the week. I recommend scheduling challenging tasks during these times.`;
-      } 
-      else if (userMessageLower.includes('focus') || userMessageLower.includes('concentrate')) {
-        aiResponse = `Your optimal focus session appears to be around ${Math.round(patterns.averageFocusSessionLength)} minutes. I recommend using the Pomodoro technique with 25-minute focus sessions and 5-minute breaks, gradually building up to longer sessions if needed.`;
+      // Create a context-rich prompt by including previous messages and user data
+      const conversationContext = messages
+        .slice(-5) // Take last 5 messages for context
+        .map(m => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`)
+        .join('\n');
+      
+      const prompt = `
+You are an AI assistant for a productivity app, specialized in time management and work pattern analysis.
+Respond to the user's latest message about productivity and time management.
+
+Here is data about the user's productivity patterns:
+- Most productive time of day: ${patterns.mostProductiveTimeOfDay}
+- Most productive day of the week: ${patterns.mostProductiveDay}
+- Average focus session length: ${Math.round(patterns.averageFocusSessionLength)} minutes
+- Task completion rate: ${Math.round(patterns.completionRate)}%
+- Total tracked time: ${Math.round(patterns.totalTimeSpent)} minutes
+- Common categories: ${patterns.commonCategories.map(c => c.category).join(', ') || 'No categories yet'}
+
+Previous conversation for context:
+${conversationContext}
+
+User's latest message: ${userMessage.text}
+
+Respond in a helpful, data-driven way. Provide specific, actionable advice based on their productivity patterns.
+If you don't have enough data (e.g., if total tracked time is 0), let the user know you need more tracking data to provide personalized insights.
+Keep your response under 200 words.
+`;
+
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: prompt }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.4,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 500,
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error?.message || "Failed to get response from Gemini API");
       }
-      else if (userMessageLower.includes('schedule') || userMessageLower.includes('plan')) {
-        aiResponse = `Based on your patterns, here's an optimal daily schedule:\n\n• Morning (8-10 AM): Deep work on challenging tasks\n• Late morning (10-12 PM): Meetings and collaborative work\n• Afternoon (2-4 PM): Administrative tasks and follow-ups\n• Late afternoon (4-6 PM): Learning and creative work\n\nAdjust according to your energy levels throughout the day.`;
-      }
-      else if (userMessageLower.includes('analysis') || userMessageLower.includes('analyze')) {
-        if (patterns.totalTimeSpent === 0) {
-          aiResponse = "I don't have enough data yet to provide a detailed analysis. Try using the timer and task tracking features more, and I'll be able to give you better insights soon.";
-        } else {
-          aiResponse = `Productivity Analysis:\n\n• Total tracked time: ${Math.round(patterns.totalTimeSpent)} minutes\n• Completion rate: ${Math.round(patterns.completionRate)}%\n• Most productive time: ${patterns.mostProductiveTimeOfDay}\n• Most productive day: ${patterns.mostProductiveDay}\n• Top categories: ${patterns.commonCategories.map(c => c.category).join(', ') || 'No categories yet'}\n\nRecommendation: Focus on increasing your task completion rate and tracking more of your activities.`;
-        }
-      }
-      else if (userMessageLower.includes('break') || userMessageLower.includes('rest')) {
-        aiResponse = `Based on your average focus session of ${Math.round(patterns.averageFocusSessionLength)} minutes, I recommend:\n\n• Short breaks: 5 minutes after 25-30 minutes of focus\n• Medium breaks: 15 minutes after 60 minutes of focus\n• Long breaks: 30 minutes after 2-3 hours of sustained work\n\nUse breaks for physical movement, hydration, and looking at something 20 feet away to rest your eyes.`;
-      }
-      else {
-        // Generic response using pattern data
-        const responses = [
-          `Based on your data, you tend to be most productive during ${patterns.mostProductiveTimeOfDay}. Try to schedule your most challenging tasks during this period.`,
-          `I notice you've been working on tasks related to ${patterns.commonCategories[0]?.category || 'various categories'}. Are you looking for ways to optimize your time spent on these activities?`,
-          `Your data shows that ${patterns.mostProductiveDay} is typically your most productive day. Would you like suggestions for how to structure this day for maximum efficiency?`,
-          `Looking at your patterns, you could benefit from ${patterns.averageFocusSessionLength < 30 ? 'gradually increasing' : 'maintaining'} your focus sessions to around 25-45 minutes, followed by short breaks.`,
-          `Your task completion rate is ${Math.round(patterns.completionRate)}%. I can help you improve this with better time blocking and estimation techniques.`
-        ];
-        
-        if (patterns.totalTimeSpent === 0) {
-          aiResponse = "I don't have enough data yet to provide personalized recommendations. Try using the timer and task tracking features more, and I'll be able to give you better insights soon.";
-        } else {
-          aiResponse = responses[Math.floor(Math.random() * responses.length)];
-        }
+
+      // Extract the response text
+      let responseText = "";
+      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+        responseText = data.candidates[0].content.parts[0].text.trim();
+      } else {
+        responseText = "Sorry, I couldn't generate a proper response. Please try again later.";
       }
       
+      // Add AI message
       const aiMessage: Message = {
         id: Date.now().toString(),
-        text: aiResponse,
+        text: responseText,
         sender: 'ai',
         timestamp: new Date(),
       };
       
       setMessages(prev => [...prev, aiMessage]);
-    }, 1000);
+      
+    } catch (error) {
+      console.error("Error communicating with Gemini API:", error);
+      
+      // Add error message
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        text: "Sorry, there was an error communicating with the Gemini API. Please check your API key and try again.",
+        sender: 'ai',
+        timestamp: new Date(),
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+      
+      toast({
+        title: "Gemini API Error",
+        description: error instanceof Error ? error.message : "Failed to communicate with Gemini API",
+        variant: "destructive"
+      });
+    } finally {
+      setIsWaitingForResponse(false);
+    }
   };
 
   const handleSuggestedPrompt = (prompt: string) => {
@@ -210,6 +336,27 @@ const TimeManagementAI: React.FC = () => {
     setIsOpen(!isOpen);
   };
 
+  const handleApiKeySave = (newApiKey: string) => {
+    setApiKey(newApiKey);
+    localStorage.setItem('geminiApiKey', newApiKey);
+    toast({
+      title: "API Key Saved",
+      description: "Your Gemini API key has been saved.",
+    });
+    
+    // If this is the first time setting the key, update the messages
+    if (!apiKey && newApiKey) {
+      const updatedMessages = [...messages];
+      if (updatedMessages.length === 1 && updatedMessages[0].id === '1') {
+        updatedMessages[0] = {
+          ...updatedMessages[0],
+          text: "I'm your Gemini-powered Time Management Assistant. I analyze your work patterns and can recommend optimal schedules. What would you like to know about your productivity?"
+        };
+        setMessages(updatedMessages);
+      }
+    }
+  };
+
   return (
     <>
       {/* Floating button */}
@@ -232,10 +379,46 @@ const TimeManagementAI: React.FC = () => {
           <CardHeader className="bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-t-lg py-3">
             <CardTitle className="text-base font-medium flex items-center gap-2">
               <Clock className="h-4 w-4" />
-              Time Management AI
+              Gemini Time Assistant
               <Badge variant="secondary" className="ml-auto bg-white/20 text-white hover:bg-white/30">
                 Pattern Analysis
               </Badge>
+              
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-white hover:bg-white/20">
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Gemini API Settings</DialogTitle>
+                    <DialogDescription>
+                      Enter your Gemini API key to enable AI features. You can get an API key from Google AI Studio.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="timeApiKey">API Key</Label>
+                      <Input 
+                        id="timeApiKey" 
+                        type="password" 
+                        placeholder="Enter your Gemini API key" 
+                        defaultValue={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                      />
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Your API key is stored locally in your browser and never sent to our servers.
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button onClick={() => handleApiKeySave(apiKey)}>Save</Button>
+                    </DialogClose>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -269,6 +452,23 @@ const TimeManagementAI: React.FC = () => {
                     </div>
                   </div>
                 ))}
+                
+                {/* Show AI loading indicator */}
+                {isWaitingForResponse && (
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-100">
+                      <BrainCircuit className="h-4 w-4 text-gray-600" />
+                    </div>
+                    <div className="max-w-[75%] p-3 rounded-lg text-sm bg-gray-100 text-gray-800 rounded-tl-none flex items-center gap-2">
+                      <span>Thinking</span>
+                      <span className="flex space-x-1">
+                        <span className="animate-bounce delay-0 h-1.5 w-1.5 rounded-full bg-gray-400"></span>
+                        <span className="animate-bounce delay-150 h-1.5 w-1.5 rounded-full bg-gray-400"></span>
+                        <span className="animate-bounce delay-300 h-1.5 w-1.5 rounded-full bg-gray-400"></span>
+                      </span>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Show AI suggestion if available */}
                 {showSuggestion && currentSuggestion && (
@@ -311,19 +511,24 @@ const TimeManagementAI: React.FC = () => {
           <CardFooter className="p-3 border-t">
             <div className="flex w-full items-center gap-2">
               <Input
-                placeholder="Ask about your productivity patterns..."
+                placeholder={apiKey ? "Ask about your productivity patterns..." : "Set API key first..."}
                 value={currentMessage}
                 onChange={(e) => setCurrentMessage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                onKeyDown={(e) => e.key === 'Enter' && !isWaitingForResponse && handleSendMessage()}
                 className="flex-1"
+                disabled={isWaitingForResponse || !apiKey}
               />
               <Button 
                 size="icon" 
                 onClick={handleSendMessage}
-                disabled={!currentMessage.trim()}
+                disabled={!currentMessage.trim() || isWaitingForResponse || !apiKey}
                 className="bg-green-600 hover:bg-green-700"
               >
-                <Send className="h-4 w-4" />
+                {isWaitingForResponse ? (
+                  <span className="animate-spin"><Loader2 className="h-4 w-4" /></span>
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </CardFooter>
