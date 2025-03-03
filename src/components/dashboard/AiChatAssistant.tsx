@@ -1,6 +1,5 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, User, Send, X, Sparkles, Calendar, Lightbulb, Settings } from 'lucide-react';
+import { Bot, User, Send, X, Sparkles, Calendar, Lightbulb, Settings, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -64,13 +63,11 @@ const AiChatAssistant: React.FC = () => {
     }
   }, [messages]);
 
-  // Load messages from localStorage on component mount
   useEffect(() => {
     const savedMessages = localStorage.getItem('aiChatMessages');
     if (savedMessages) {
       try {
         const parsedMessages = JSON.parse(savedMessages);
-        // Convert string timestamps back to Date objects
         const messagesWithDateObjects = parsedMessages.map((msg: any) => ({
           ...msg,
           timestamp: new Date(msg.timestamp)
@@ -82,20 +79,16 @@ const AiChatAssistant: React.FC = () => {
     }
   }, []);
 
-  // Save messages to localStorage whenever they change
   useEffect(() => {
     if (messages.length > 0) {
       localStorage.setItem('aiChatMessages', JSON.stringify(messages));
     }
   }, [messages]);
 
-  // Effect to show AI suggestions periodically
   useEffect(() => {
-    // Only show suggestions if chat is open and not too frequently
     if (!isOpen || messages.length > 15) return;
     
     const suggestionTimer = setTimeout(() => {
-      // Only show suggestions if there's a gap in conversation (at least 10 seconds since last message)
       const lastMessageTime = messages[messages.length - 1]?.timestamp || new Date(0);
       const timeElapsed = new Date().getTime() - lastMessageTime.getTime();
       
@@ -150,7 +143,6 @@ Examples of good suggestions:
         return;
       }
 
-      // Extract the suggestion text
       let suggestionText = "";
       if (data.candidates && data.candidates[0] && data.candidates[0].content) {
         suggestionText = data.candidates[0].content.parts[0].text.trim();
@@ -174,7 +166,6 @@ Examples of good suggestions:
       return;
     }
     
-    // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
       text: currentMessage,
@@ -184,13 +175,12 @@ Examples of good suggestions:
     
     setMessages(prev => [...prev, userMessage]);
     setCurrentMessage('');
-    setShowSuggestion(false); // Hide any suggestion when user sends a message
+    setShowSuggestion(false);
     setIsWaitingForResponse(true);
     
     try {
-      // Create a context-rich prompt by including previous messages
       const conversationContext = messages
-        .slice(-5) // Take last 5 messages for context
+        .slice(-5)
         .map(m => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`)
         .join('\n');
       
@@ -235,7 +225,6 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
         throw new Error(data.error?.message || "Failed to get response from Gemini API");
       }
 
-      // Extract the response text
       let responseText = "";
       if (data.candidates && data.candidates[0] && data.candidates[0].content) {
         responseText = data.candidates[0].content.parts[0].text.trim();
@@ -243,7 +232,6 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
         responseText = "Sorry, I couldn't generate a proper response. Please try again later.";
       }
       
-      // Add AI message
       const aiMessage: Message = {
         id: Date.now().toString(),
         text: responseText,
@@ -256,7 +244,6 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
     } catch (error) {
       console.error("Error communicating with Gemini API:", error);
       
-      // Add error message
       const errorMessage: Message = {
         id: Date.now().toString(),
         text: "Sorry, there was an error communicating with the Gemini API. Please check your API key and try again.",
@@ -283,7 +270,6 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
   const handleSuggestionResponse = () => {
     if (!currentSuggestion) return;
     
-    // Add the AI suggestion as a message
     const suggestionMessage: Message = {
       id: Date.now().toString(),
       text: currentSuggestion,
@@ -308,7 +294,6 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
       description: "Your Gemini API key has been saved.",
     });
     
-    // If this is the first time setting the key, update the messages
     if (!apiKey && newApiKey) {
       const updatedMessages = [...messages];
       if (updatedMessages.length === 1 && updatedMessages[0].id === '1') {
@@ -323,7 +308,6 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
 
   return (
     <>
-      {/* Floating button */}
       <Button
         onClick={toggleChat}
         className={cn(
@@ -334,7 +318,6 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
         {!isOpen ? <Sparkles className="h-6 w-6" /> : <X className="h-6 w-6" />}
       </Button>
       
-      {/* Chat panel */}
       <div className={cn(
         "fixed bottom-24 right-6 w-80 md:w-96 shadow-lg rounded-lg transition-all duration-300 transform z-50",
         isOpen ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0 pointer-events-none"
@@ -417,7 +400,6 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
                   </div>
                 ))}
                 
-                {/* Show AI loading indicator */}
                 {isWaitingForResponse && (
                   <div className="flex items-start gap-2.5">
                     <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-100">
@@ -434,7 +416,6 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
                   </div>
                 )}
                 
-                {/* Show AI suggestion if available */}
                 {showSuggestion && currentSuggestion && (
                   <div className="flex items-start gap-2.5 animate-pulse">
                     <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-100">
@@ -454,7 +435,6 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
               </div>
             </ScrollArea>
             
-            {/* Suggested prompts */}
             {messages.length <= 3 && (
               <div className="p-3 border-t border-gray-100">
                 <p className="text-xs text-gray-500 mb-2">Try asking me:</p>

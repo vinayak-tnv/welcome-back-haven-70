@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   ClipboardList, 
@@ -78,13 +77,11 @@ const TimeManagementAI: React.FC = () => {
     }
   }, [messages]);
 
-  // Load messages from localStorage on component mount
   useEffect(() => {
     const savedMessages = localStorage.getItem('timeAIMessages');
     if (savedMessages) {
       try {
         const parsedMessages = JSON.parse(savedMessages);
-        // Convert string timestamps back to Date objects
         const messagesWithDateObjects = parsedMessages.map((msg: any) => ({
           ...msg,
           timestamp: new Date(msg.timestamp)
@@ -96,19 +93,16 @@ const TimeManagementAI: React.FC = () => {
     }
   }, []);
 
-  // Save messages to localStorage whenever they change
   useEffect(() => {
     if (messages.length > 0) {
       localStorage.setItem('timeAIMessages', JSON.stringify(messages));
     }
   }, [messages]);
 
-  // Send periodic productivity insights if we have data
   useEffect(() => {
     if (!isOpen || timeEntries.length === 0 || !apiKey) return;
     
     const suggestionTimer = setTimeout(() => {
-      // Only show suggestions if there's a gap in conversation (at least 10 seconds since last message)
       const lastMessageTime = messages[messages.length - 1]?.timestamp || new Date(0);
       const timeElapsed = new Date().getTime() - lastMessageTime.getTime();
       
@@ -169,12 +163,10 @@ Make it personalized, evidence-based, and directly connected to the data provide
         return;
       }
 
-      // Extract the suggestion text
       let suggestionText = "";
       if (data.candidates && data.candidates[0] && data.candidates[0].content) {
         suggestionText = data.candidates[0].content.parts[0].text.trim();
         
-        // Only set if we have meaningful data
         if (patterns.totalTimeSpent > 0) {
           setCurrentSuggestion(suggestionText);
           setShowSuggestion(true);
@@ -197,7 +189,6 @@ Make it personalized, evidence-based, and directly connected to the data provide
       return;
     }
     
-    // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
       text: currentMessage,
@@ -207,16 +198,14 @@ Make it personalized, evidence-based, and directly connected to the data provide
     
     setMessages(prev => [...prev, userMessage]);
     setCurrentMessage('');
-    setShowSuggestion(false); // Hide any suggestion when user sends a message
+    setShowSuggestion(false);
     setIsWaitingForResponse(true);
     
     try {
-      // Get productivity patterns for context
       const patterns = getProductivityPatterns();
       
-      // Create a context-rich prompt by including previous messages and user data
       const conversationContext = messages
-        .slice(-5) // Take last 5 messages for context
+        .slice(-5)
         .map(m => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`)
         .join('\n');
       
@@ -271,7 +260,6 @@ Keep your response under 200 words.
         throw new Error(data.error?.message || "Failed to get response from Gemini API");
       }
 
-      // Extract the response text
       let responseText = "";
       if (data.candidates && data.candidates[0] && data.candidates[0].content) {
         responseText = data.candidates[0].content.parts[0].text.trim();
@@ -279,7 +267,6 @@ Keep your response under 200 words.
         responseText = "Sorry, I couldn't generate a proper response. Please try again later.";
       }
       
-      // Add AI message
       const aiMessage: Message = {
         id: Date.now().toString(),
         text: responseText,
@@ -292,7 +279,6 @@ Keep your response under 200 words.
     } catch (error) {
       console.error("Error communicating with Gemini API:", error);
       
-      // Add error message
       const errorMessage: Message = {
         id: Date.now().toString(),
         text: "Sorry, there was an error communicating with the Gemini API. Please check your API key and try again.",
@@ -319,7 +305,6 @@ Keep your response under 200 words.
   const handleSuggestionResponse = () => {
     if (!currentSuggestion) return;
     
-    // Add the AI suggestion as a message
     const suggestionMessage: Message = {
       id: Date.now().toString(),
       text: currentSuggestion,
@@ -344,7 +329,6 @@ Keep your response under 200 words.
       description: "Your Gemini API key has been saved.",
     });
     
-    // If this is the first time setting the key, update the messages
     if (!apiKey && newApiKey) {
       const updatedMessages = [...messages];
       if (updatedMessages.length === 1 && updatedMessages[0].id === '1') {
@@ -359,7 +343,6 @@ Keep your response under 200 words.
 
   return (
     <>
-      {/* Floating button */}
       <Button
         onClick={toggleChat}
         className={cn(
@@ -370,7 +353,6 @@ Keep your response under 200 words.
         {!isOpen ? <BrainCircuit className="h-6 w-6" /> : <X className="h-6 w-6" />}
       </Button>
       
-      {/* Chat panel */}
       <div className={cn(
         "fixed bottom-24 left-6 w-80 md:w-96 shadow-lg rounded-lg transition-all duration-300 transform z-50",
         isOpen ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0 pointer-events-none"
@@ -453,7 +435,6 @@ Keep your response under 200 words.
                   </div>
                 ))}
                 
-                {/* Show AI loading indicator */}
                 {isWaitingForResponse && (
                   <div className="flex items-start gap-2.5">
                     <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-100">
@@ -470,7 +451,6 @@ Keep your response under 200 words.
                   </div>
                 )}
                 
-                {/* Show AI suggestion if available */}
                 {showSuggestion && currentSuggestion && (
                   <div className="flex items-start gap-2.5 animate-pulse">
                     <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-100">
@@ -490,7 +470,6 @@ Keep your response under 200 words.
               </div>
             </ScrollArea>
             
-            {/* Suggested prompts */}
             {messages.length <= 3 && (
               <div className="p-3 border-t border-gray-100">
                 <p className="text-xs text-gray-500 mb-2">Try asking me:</p>

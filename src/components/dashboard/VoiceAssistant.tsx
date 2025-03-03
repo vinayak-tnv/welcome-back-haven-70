@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Sparkles, Loader2, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -50,13 +49,11 @@ const VoiceAssistant: React.FC = () => {
   const { addTask, getProductivityPatterns, getSleepPatterns } = useTasks();
 
   useEffect(() => {
-    // Check if browser supports speech recognition
     if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
       setIsSupported(false);
       return;
     }
 
-    // Initialize speech recognition
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     recognitionRef.current = new SpeechRecognition();
     recognitionRef.current.continuous = false;
@@ -138,11 +135,9 @@ const VoiceAssistant: React.FC = () => {
     setIsProcessing(true);
     
     try {
-      // Get context data for the AI
       const sleepData = getSleepPatterns();
       const productivityData = getProductivityPatterns();
       
-      // Create a context-rich prompt for Gemini
       const prompt = `
 As an AI assistant for a productivity app, respond to this user command: "${text}"
 
@@ -160,7 +155,6 @@ For commands about sleep or productivity, provide a brief data-based insight.
 Keep responses concise and actionable.
 `;
 
-      // Call Gemini API
       const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
         method: "POST",
         headers: {
@@ -190,7 +184,6 @@ Keep responses concise and actionable.
         throw new Error(data.error?.message || "Failed to get response from Gemini API");
       }
 
-      // Extract the response text
       let responseText = "";
       if (data.candidates && data.candidates[0] && data.candidates[0].content) {
         responseText = data.candidates[0].content.parts[0].text;
@@ -200,21 +193,17 @@ Keep responses concise and actionable.
       
       setResponse(responseText);
       
-      // Check if the response contains task details we can parse
       const taskMatch = responseText.match(/add(?:ed|ing)?\s+task\s+["']?([^"']+)["']?/i);
       if (taskMatch) {
         const title = taskMatch[1].trim();
         
-        // Look for time
         const timeMatch = responseText.match(/at\s+(\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)/i);
         const time = timeMatch ? convertToTime(timeMatch[1]) : "09:00";
         
-        // Look for priority
         let priority: 'high' | 'medium' | 'low' = 'medium';
         if (responseText.toLowerCase().includes("high priority")) priority = 'high';
         if (responseText.toLowerCase().includes("low priority")) priority = 'low';
         
-        // Add the task
         addTask({
           title,
           time,
@@ -224,7 +213,6 @@ Keep responses concise and actionable.
         });
       }
       
-      // Text-to-speech response
       if ('speechSynthesis' in window) {
         const speech = new SpeechSynthesisUtterance(responseText);
         speech.lang = 'en-US';
@@ -245,15 +233,12 @@ Keep responses concise and actionable.
     }
   };
 
-  // Convert various time formats to 24h format
   const convertToTime = (timeStr: string): string => {
-    // Handle formats like "9am", "9:30 pm", etc.
     const cleanTime = timeStr.toLowerCase().trim();
     let hours = 0;
     let minutes = 0;
     
     if (cleanTime.includes(':')) {
-      // Format like "9:30 am"
       const parts = cleanTime.split(':');
       hours = parseInt(parts[0], 10);
       const minutesPart = parts[1].replace(/[^0-9]/g, '');
@@ -266,7 +251,6 @@ Keep responses concise and actionable.
         hours = 0;
       }
     } else {
-      // Format like "9am" or "9 am"
       const numericPart = cleanTime.replace(/[^0-9]/g, '');
       hours = parseInt(numericPart, 10);
       
