@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { useTasks } from '@/context/TaskContext';
 import { useToast } from '@/hooks/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 
 interface Message {
   id: string;
@@ -172,8 +172,8 @@ const AiChatAssistant: React.FC = () => {
 
   const callGeminiApi = async (text: string): Promise<string> => {
     try {
-      // Updated to use correct Gemini API endpoint (v1 instead of v1beta)
-      const url = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
+      // FIXED: Updated to use the correct Gemini API endpoint with proper model name
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
       
       // Get the last 5 messages to provide context (excluding the current message)
       const recentMessages = messages.slice(-5).map(msg => ({
@@ -509,6 +509,9 @@ const AiChatAssistant: React.FC = () => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Set Gemini API Key</DialogTitle>
+            <DialogDescription>
+              Enter your Google Gemini API key to use with the assistant.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">

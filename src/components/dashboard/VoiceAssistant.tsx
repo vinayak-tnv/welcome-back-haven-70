@@ -97,8 +97,8 @@ const VoiceAssistant: React.FC = () => {
 
   const callGeminiApi = async (text: string): Promise<string> => {
     try {
-      // Using the correct Gemini API endpoint (v1 instead of v1beta)
-      const url = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
+      // FIXED: Using the correct Gemini API endpoint with the proper model name
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
       
       const response = await fetch(`${url}?key=${apiKey}`, {
         method: 'POST',

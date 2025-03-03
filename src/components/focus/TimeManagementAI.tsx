@@ -87,8 +87,8 @@ const TimeManagementAI: React.FC = () => {
 
   const callGeminiApi = async (text: string): Promise<string> => {
     try {
-      // Updated to use the correct Gemini API endpoint (v1 instead of v1beta)
-      const url = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
+      // FIXED: Updated to use the correct Gemini API endpoint with proper model name
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
       
       // Get productivity patterns to provide context
       const patterns = getProductivityPatterns();
