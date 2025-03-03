@@ -6,6 +6,7 @@ type Theme = 'light' | 'dark' | 'system';
 interface ThemeContextType {
   theme: Theme;
   setTheme: (theme: Theme) => void;
+  isDarkMode: boolean; // Added to quickly check if dark mode is active
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -24,6 +25,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     return 'light';
   });
 
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
+
   useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark');
@@ -39,6 +42,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
       appliedTheme = theme;
     }
     
+    // Update isDarkMode state
+    setIsDarkMode(appliedTheme === 'dark');
+    
     // Store theme preference
     localStorage.setItem('theme', theme);
   }, [theme]);
@@ -52,7 +58,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     const handleChange = () => {
       const root = window.document.documentElement;
       root.classList.remove('light', 'dark');
-      root.classList.add(mediaQuery.matches ? 'dark' : 'light');
+      const newTheme = mediaQuery.matches ? 'dark' : 'light';
+      root.classList.add(newTheme);
+      setIsDarkMode(newTheme === 'dark');
     };
     
     mediaQuery.addEventListener('change', handleChange);
@@ -60,7 +68,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [theme]);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, isDarkMode }}>
       {children}
     </ThemeContext.Provider>
   );

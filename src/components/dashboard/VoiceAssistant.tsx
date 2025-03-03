@@ -30,11 +30,18 @@ const VoiceAssistant: React.FC = () => {
   const [response, setResponse] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
+  const [apiKey, setApiKey] = useState<string>("");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const { toast } = useToast();
   const { addTask, getProductivityPatterns, getSleepPatterns } = useTasks();
 
   useEffect(() => {
+    // Load API key from localStorage if available
+    const savedApiKey = localStorage.getItem('geminiApiKey');
+    if (savedApiKey) {
+      setApiKey(savedApiKey);
+    }
+
     // Check if browser supports speech recognition
     if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
       setIsSupported(false);
@@ -89,7 +96,26 @@ const VoiceAssistant: React.FC = () => {
     if (isListening) {
       stopListening();
     } else {
+      if (!apiKey) {
+        promptForApiKey();
+        return;
+      }
       startListening();
+    }
+  };
+
+  const promptForApiKey = () => {
+    const key = prompt("Please enter your Gemini API key to continue:");
+    if (key) {
+      setApiKey(key);
+      localStorage.setItem('geminiApiKey', key);
+      startListening();
+    } else {
+      toast({
+        title: "API Key Required",
+        description: "A Gemini API key is required to use the voice assistant.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -110,100 +136,112 @@ const VoiceAssistant: React.FC = () => {
     recognitionRef.current?.stop();
   };
 
-  const processVoiceCommand = (text: string) => {
+  const callGeminiApi = async (text: string): Promise<string> => {
+    if (!apiKey) {
+      return "API key is missing. Please provide a Gemini API key to continue.";
+    }
+
+    try {
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+      const response = await fetch(`${url}?key=${apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `You are a voice assistant for a productivity and task management app. The user has said: "${text}". 
+              If they want to add a task, extract the task title, time (convert to 24h format), and priority (high/medium/low).
+              If they want information about their sleep or productivity patterns, provide that analysis.
+              If it's another type of request, respond helpfully in a brief and efficient manner.
+              
+              If this is a task creation request, format your response as JSON like this:
+              {"action": "addTask", "title": "Task title", "time": "HH:MM", "priority": "high/medium/low"}
+              
+              If it's a request for sleep analysis:
+              {"action": "sleepAnalysis"}
+              
+              If it's a request for productivity info:
+              {"action": "productivityInfo"}
+              
+              Otherwise, just respond conversationally:
+              {"action": "response", "message": "Your helpful response here"}
+              `
+            }],
+            role: "user"
+          }],
+          generationConfig: {
+            temperature: 0.2,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 1024,
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.candidates[0].content.parts[0].text;
+    } catch (error) {
+      console.error('Error calling Gemini API:', error);
+      return "Sorry, there was an error communicating with the Gemini API. Please try again.";
+    }
+  };
+
+  const processVoiceCommand = async (text: string) => {
     setIsProcessing(true);
-    const lowerText = text.toLowerCase();
-
-    // Simple NLP - command detection
-    setTimeout(() => {
-      let responseText = "";
-
-      // Add task command
-      if (lowerText.includes("add task") || lowerText.includes("create task") || lowerText.includes("new task")) {
-        const titleMatch = text.match(/(?:add|create|new)\s+task\s+(?:called|named|titled)?\s*["']?([^"']+)["']?/i);
-        const title = titleMatch ? titleMatch[1] : "New task";
+    
+    try {
+      const geminiResponse = await callGeminiApi(text);
+      
+      try {
+        // Try to parse as JSON
+        const parsedResponse = JSON.parse(geminiResponse);
         
-        // Extract time
-        const timeMatch = text.match(/at\s+(\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)/i);
-        const time = timeMatch ? convertToTime(timeMatch[1]) : "09:00";
-        
-        // Extract priority
-        let priority: 'high' | 'medium' | 'low' = 'medium';
-        if (lowerText.includes("high priority") || lowerText.includes("important")) priority = 'high';
-        if (lowerText.includes("low priority") || lowerText.includes("not important")) priority = 'low';
-        
-        // Create task
-        addTask({
-          title,
-          time,
-          priority,
-          completed: false,
-          date: new Date().toISOString().split('T')[0]
-        });
-        
-        responseText = `Added task "${title}" at ${time} with ${priority} priority.`;
+        if (parsedResponse.action === "addTask") {
+          // Extract task details and add the task
+          addTask({
+            title: parsedResponse.title,
+            time: parsedResponse.time,
+            priority: parsedResponse.priority as 'high' | 'medium' | 'low',
+            completed: false,
+            date: new Date().toISOString().split('T')[0]
+          });
+          
+          setResponse(`Added task "${parsedResponse.title}" at ${parsedResponse.time} with ${parsedResponse.priority} priority.`);
+        } 
+        else if (parsedResponse.action === "sleepAnalysis") {
+          const sleepData = getSleepPatterns();
+          setResponse(`You sleep an average of ${sleepData.averageSleepHours.toFixed(1)} hours per night. Your usual bedtime is ${sleepData.averageBedtime} and you typically wake up at ${sleepData.averageWakeupTime}. ${sleepData.recommendations[0]}`);
+        }
+        else if (parsedResponse.action === "productivityInfo") {
+          const productivity = getProductivityPatterns();
+          setResponse(`You're most productive during the ${productivity.mostProductiveTimeOfDay}, and ${productivity.mostProductiveDay} is your most productive day. Your average focus session lasts ${Math.round(productivity.averageFocusSessionLength)} minutes.`);
+        }
+        else {
+          // For general responses
+          setResponse(parsedResponse.message || geminiResponse);
+        }
+      } catch (e) {
+        // If it's not valid JSON, just use the full response
+        setResponse(geminiResponse);
       }
-      // Sleep analysis command
-      else if (lowerText.includes("sleep") && (lowerText.includes("analysis") || lowerText.includes("pattern") || lowerText.includes("report"))) {
-        const sleepData = getSleepPatterns();
-        responseText = `You sleep an average of ${sleepData.averageSleepHours.toFixed(1)} hours per night. Your usual bedtime is ${sleepData.averageBedtime} and you typically wake up at ${sleepData.averageWakeupTime}. ${sleepData.recommendations[0]}`;
-      }
-      // Productivity command 
-      else if (lowerText.includes("productivity") || (lowerText.includes("how") && lowerText.includes("productive"))) {
-        const productivity = getProductivityPatterns();
-        responseText = `You're most productive during the ${productivity.mostProductiveTimeOfDay}, and ${productivity.mostProductiveDay} is your most productive day. Your average focus session lasts ${Math.round(productivity.averageFocusSessionLength)} minutes.`;
-      }
-      // Fallback
-      else {
-        responseText = "I'm sorry, I didn't understand that command. You can ask me to add tasks, analyze sleep patterns, or check productivity.";
-      }
-
-      setResponse(responseText);
+    } catch (error) {
+      setResponse("Sorry, I couldn't process that request. Please try again.");
+    } finally {
       setIsProcessing(false);
       
       // Text-to-speech response
-      if ('speechSynthesis' in window) {
-        const speech = new SpeechSynthesisUtterance(responseText);
+      if ('speechSynthesis' in window && response) {
+        const speech = new SpeechSynthesisUtterance(response);
         speech.lang = 'en-US';
         window.speechSynthesis.speak(speech);
       }
-    }, 1000);
-  };
-
-  // Convert various time formats to 24h format
-  const convertToTime = (timeStr: string): string => {
-    // Handle formats like "9am", "9:30 pm", etc.
-    const cleanTime = timeStr.toLowerCase().trim();
-    let hours = 0;
-    let minutes = 0;
-    
-    if (cleanTime.includes(':')) {
-      // Format like "9:30 am"
-      const parts = cleanTime.split(':');
-      hours = parseInt(parts[0], 10);
-      const minutesPart = parts[1].replace(/[^0-9]/g, '');
-      minutes = parseInt(minutesPart, 10);
-      
-      if (cleanTime.includes('pm') && hours < 12) {
-        hours += 12;
-      }
-      if (cleanTime.includes('am') && hours === 12) {
-        hours = 0;
-      }
-    } else {
-      // Format like "9am" or "9 am"
-      const numericPart = cleanTime.replace(/[^0-9]/g, '');
-      hours = parseInt(numericPart, 10);
-      
-      if (cleanTime.includes('pm') && hours < 12) {
-        hours += 12;
-      }
-      if (cleanTime.includes('am') && hours === 12) {
-        hours = 0;
-      }
     }
-    
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -235,7 +273,7 @@ const VoiceAssistant: React.FC = () => {
             
             {response && (
               <div className="space-y-1">
-                <Badge variant="outline" className="bg-indigo-100 text-indigo-700">Assistant:</Badge>
+                <Badge variant="outline" className="bg-indigo-100 text-indigo-700">Gemini:</Badge>
                 <p className="text-sm">{response}</p>
               </div>
             )}
