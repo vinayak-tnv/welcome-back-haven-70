@@ -43,7 +43,7 @@ export const sendPromptToGemini = async (
     topK?: number;
     topP?: number;
   } = {}
-): Promise<string> {
+): Promise<string> => {
   if (!validateApiKey(apiKey)) {
     throw new Error("Invalid API key format. Please provide a valid Gemini API key.");
   }
