@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, User, Send, X, Sparkles, Lightbulb, Settings, Loader2 } from 'lucide-react';
+import { MessageSquare, X, Send, User, Bot, Sparkles, Settings, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import AiChatSuggestions from './AiChatSuggestions';
 import { useToast } from '@/hooks/use-toast';
+import { useTasks } from '@/context/TaskContext';
 import {
   Dialog,
   DialogContent,
@@ -18,6 +20,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
+import { sendPromptToGemini, validateApiKey, getStoredApiKey, storeApiKey } from '@/utils/geminiApi';
 
 interface Message {
   id: string;
@@ -29,33 +32,19 @@ interface Message {
 const initialMessages: Message[] = [
   {
     id: '1',
-    text: "Hello! I'm your Gemini-powered AI assistant. I can help you with scheduling, planning, and provide suggestions for your day. How can I help you today?",
+    text: "Hi there! I'm your Gemini-powered productivity assistant. I can help you manage your tasks, schedule, and provide productivity tips. How can I assist you today?",
     sender: 'ai',
     timestamp: new Date(),
   },
 ];
 
-const suggestedPrompts = [
-  "Plan my day efficiently",
-  "Suggest best times for deep work",
-  "How can I optimize my meetings?",
-  "Find gaps in my schedule",
-  "Help me prioritize my tasks",
-  "Generate a weekly planning template"
-];
-
-const GEMINI_API_ENDPOINT = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
-
 const AiChatAssistant: React.FC = () => {
   const { toast } = useToast();
+  const { tasks, addTask } = useTasks();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [currentMessage, setCurrentMessage] = useState('');
-  const [showSuggestion, setShowSuggestion] = useState(false);
-  const [currentSuggestion, setCurrentSuggestion] = useState('');
-  const [apiKey, setApiKey] = useState(() => {
-    return localStorage.getItem('geminiApiKey') || '';
-  });
+  const [apiKey, setApiKey] = useState(getStoredApiKey);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
@@ -87,77 +76,13 @@ const AiChatAssistant: React.FC = () => {
     }
   }, [messages]);
 
-  useEffect(() => {
-    if (!isOpen || messages.length > 15) return;
-    
-    const suggestionTimer = setTimeout(() => {
-      const lastMessageTime = messages[messages.length - 1]?.timestamp || new Date(0);
-      const timeElapsed = new Date().getTime() - lastMessageTime.getTime();
-      
-      if (timeElapsed > 10000 && !showSuggestion) {
-        callGeminiForSuggestion();
-      }
-    }, 15000);
-    
-    return () => clearTimeout(suggestionTimer);
-  }, [isOpen, messages, showSuggestion, apiKey]);
-
-  const validateApiKey = (key: string): boolean => {
-    return key.length >= 30;
+  const clearChat = () => {
+    setMessages(initialMessages);
+    localStorage.removeItem('aiChatMessages');
   };
-
-  const callGeminiForSuggestion = async () => {
-    if (!apiKey || !validateApiKey(apiKey)) return;
-    
-    try {
-      const prompt = `
-As an AI assistant for a productivity app, generate ONE short productivity tip or insight.
-Make it concise (1-2 sentences), actionable, and evidence-based.
-Examples of good suggestions:
-- "Did you know that scheduling challenging tasks during your peak energy hours can boost productivity by up to 30%?"
-- "Consider using the Pomodoro Technique: 25 minutes of focused work followed by a 5-minute break can improve concentration."
-- "Research shows that short breaks between meetings reduce stress and improve decision-making. Try adding 5-10 minute buffers."
-`;
-
-      const response = await fetch(GEMINI_API_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt }
-              ]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 100,
-          }
-        })
-      });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        console.error("Gemini API error:", data);
-        return;
-      }
-
-      let suggestionText = "";
-      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-        suggestionText = data.candidates[0].content.parts[0].text.trim();
-        setCurrentSuggestion(suggestionText);
-        setShowSuggestion(true);
-      }
-    } catch (error) {
-      console.error("Error getting Gemini suggestion:", error);
-    }
+  
+  const handleSelectedPrompt = (prompt: string) => {
+    setCurrentMessage(prompt);
   };
 
   const handleSendMessage = async () => {
@@ -171,7 +96,7 @@ Examples of good suggestions:
       });
       return;
     }
-
+    
     if (!validateApiKey(apiKey)) {
       toast({
         title: "Invalid API Key",
@@ -190,10 +115,12 @@ Examples of good suggestions:
     
     setMessages(prev => [...prev, userMessage]);
     setCurrentMessage('');
-    setShowSuggestion(false);
     setIsWaitingForResponse(true);
     
     try {
+      const pendingTasks = tasks.filter(t => !t.completed).length;
+      const completedTasks = tasks.filter(t => t.completed).length;
+      
       const conversationContext = messages
         .slice(-5)
         .map(m => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`)
@@ -203,6 +130,10 @@ Examples of good suggestions:
 You are an AI assistant for a productivity app, focused on helping users with time management, scheduling, and planning. 
 Respond to the user's latest message below. Be helpful, concise, and provide actionable advice.
 
+Current user context:
+- Pending tasks: ${pendingTasks}
+- Completed tasks: ${completedTasks}
+
 Previous conversation for context:
 ${conversationContext}
 
@@ -211,41 +142,10 @@ User's latest message: ${userMessage.text}
 Respond in a friendly, conversational tone. Keep your response under 200 words. If the user asks about scheduling, planning, or productivity concepts, provide evidence-based advice.
 `;
 
-      const response = await fetch(GEMINI_API_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt }
-              ]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.4,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 500,
-          }
-        })
+      const responseText = await sendPromptToGemini(prompt, apiKey, {
+        temperature: 0.4,
+        maxOutputTokens: 500
       });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to get response from Gemini API");
-      }
-
-      let responseText = "";
-      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-        responseText = data.candidates[0].content.parts[0].text.trim();
-      } else {
-        responseText = "Sorry, I couldn't generate a proper response. Please try again later.";
-      }
       
       const aiMessage: Message = {
         id: Date.now().toString(),
@@ -256,12 +156,78 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
       
       setMessages(prev => [...prev, aiMessage]);
       
+      // Check if the message appears to be about creating a task
+      const taskCreationMatch = userMessage.text.toLowerCase().match(/create|add|schedule|remind|new task|to[\s-]do/g);
+      if (taskCreationMatch) {
+        const taskMatch = responseText.match(/task[:\s]+["']?([^"']+)["']?/i);
+        if (taskMatch) {
+          const title = taskMatch[1].trim();
+          
+          // Detect priority
+          let priority: 'high' | 'medium' | 'low' = 'medium';
+          if (userMessage.text.toLowerCase().includes("important") || 
+              userMessage.text.toLowerCase().includes("critical") ||
+              userMessage.text.toLowerCase().includes("urgent")) {
+            priority = 'high';
+          } else if (userMessage.text.toLowerCase().includes("low priority") ||
+                    userMessage.text.toLowerCase().includes("not important")) {
+            priority = 'low';
+          }
+          
+          // Ask user if they want to add this task
+          toast({
+            title: "Task Suggestion",
+            description: (
+              <div className="space-y-2">
+                <p>Would you like to add this task?</p>
+                <p className="font-medium">{title}</p>
+                <div className="flex gap-2 mt-1">
+                  <Button 
+                    size="sm" 
+                    variant="default"
+                    onClick={() => {
+                      addTask({
+                        title,
+                        priority,
+                        completed: false,
+                        date: new Date().toISOString().split('T')[0]
+                      });
+                      toast({
+                        title: "Task Added",
+                        description: `"${title}" has been added to your tasks.`,
+                      });
+                    }}
+                  >
+                    Add Task
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="secondary"
+                    onClick={() => {
+                      toast({
+                        title: "Cancelled",
+                        description: "No task was added.",
+                      });
+                    }}
+                  >
+                    Ignore
+                  </Button>
+                </div>
+              </div>
+            ),
+            duration: 10000,
+          });
+        }
+      }
+      
     } catch (error) {
       console.error("Error communicating with Gemini API:", error);
       
       const errorMessage: Message = {
         id: Date.now().toString(),
-        text: "Sorry, there was an error communicating with the Gemini API. Please check your API key and try again.",
+        text: error instanceof Error 
+          ? `Sorry, there was an error: ${error.message}`
+          : "Sorry, there was an error communicating with the Gemini API. Please check your API key and try again.",
         sender: 'ai',
         timestamp: new Date(),
       };
@@ -276,25 +242,6 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
     } finally {
       setIsWaitingForResponse(false);
     }
-  };
-
-  const handleSuggestedPrompt = (prompt: string) => {
-    setCurrentMessage(prompt);
-  };
-
-  const handleSuggestionResponse = () => {
-    if (!currentSuggestion) return;
-    
-    const suggestionMessage: Message = {
-      id: Date.now().toString(),
-      text: currentSuggestion,
-      sender: 'ai',
-      timestamp: new Date(),
-    };
-    
-    setMessages(prev => [...prev, suggestionMessage]);
-    setShowSuggestion(false);
-    setCurrentSuggestion('');
   };
 
   const toggleChat = () => {
@@ -312,7 +259,7 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
     }
     
     setApiKey(newApiKey);
-    localStorage.setItem('geminiApiKey', newApiKey);
+    storeApiKey(newApiKey);
     toast({
       title: "API Key Saved",
       description: "Your Gemini API key has been saved.",
@@ -323,7 +270,7 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
       if (updatedMessages.length === 1 && updatedMessages[0].id === '1') {
         updatedMessages[0] = {
           ...updatedMessages[0],
-          text: "Hello! I'm your Gemini-powered AI assistant. I can help you with scheduling, planning, and provide suggestions for your day. How can I help you today?"
+          text: "Hi there! I'm your Gemini-powered productivity assistant. I can help you manage your tasks, schedule, and provide productivity tips. How can I assist you today?"
         };
         setMessages(updatedMessages);
       }
@@ -339,7 +286,7 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
           !isOpen ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-600 hover:bg-gray-700"
         )}
       >
-        {!isOpen ? <Sparkles className="h-6 w-6" /> : <X className="h-6 w-6" />}
+        {!isOpen ? <MessageSquare className="h-6 w-6" /> : <X className="h-6 w-6" />}
       </Button>
       
       <div className={cn(
@@ -347,7 +294,7 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
         isOpen ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0 pointer-events-none"
       )}>
         <Card className="border-none shadow-xl">
-          <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg py-3">
+          <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-t-lg py-3">
             <CardTitle className="text-base font-medium flex items-center gap-2">
               <Sparkles className="h-4 w-4" />
               Gemini Assistant
@@ -370,9 +317,9 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
                   </DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
-                      <Label htmlFor="chatApiKey">API Key</Label>
+                      <Label htmlFor="apiKey">API Key</Label>
                       <Input 
-                        id="chatApiKey" 
+                        id="apiKey" 
                         type="password" 
                         placeholder="Enter your Gemini API key" 
                         defaultValue={apiKey}
@@ -443,46 +390,16 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
                   </div>
                 )}
                 
-                {showSuggestion && currentSuggestion && (
-                  <div className="flex items-start gap-2.5 animate-pulse">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-100">
-                      <Lightbulb className="h-4 w-4 text-amber-600" />
-                    </div>
-                    <div 
-                      className="max-w-[75%] p-3 rounded-lg text-sm bg-amber-50 text-amber-800 rounded-tl-none border border-amber-200 cursor-pointer hover:bg-amber-100 transition-colors"
-                      onClick={handleSuggestionResponse}
-                    >
-                      <p className="text-xs text-amber-600 font-medium mb-1">Suggestion:</p>
-                      {currentSuggestion}
-                    </div>
-                  </div>
-                )}
-                
                 <div ref={messagesEndRef} />
               </div>
             </ScrollArea>
             
-            {messages.length <= 3 && (
-              <div className="p-3 border-t border-gray-100">
-                <p className="text-xs text-gray-500 mb-2">Try asking me:</p>
-                <div className="flex flex-wrap gap-2">
-                  {suggestedPrompts.map((prompt, index) => (
-                    <button
-                      key={index}
-                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 py-1.5 px-2.5 rounded-full transition-colors"
-                      onClick={() => handleSuggestedPrompt(prompt)}
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <AiChatSuggestions onSelectPrompt={handleSelectedPrompt} />
           </CardContent>
           <CardFooter className="p-3 border-t">
             <div className="flex w-full items-center gap-2">
               <Input
-                placeholder={apiKey ? "Ask me anything about scheduling..." : "Set API key first..."}
+                placeholder={apiKey ? "Ask me anything..." : "Set API key first..."}
                 value={currentMessage}
                 onChange={(e) => setCurrentMessage(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !isWaitingForResponse && handleSendMessage()}

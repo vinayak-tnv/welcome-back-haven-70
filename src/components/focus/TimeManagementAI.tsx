@@ -31,6 +31,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
+import { sendPromptToGemini, validateApiKey, getStoredApiKey, storeApiKey } from '@/utils/geminiApi';
 
 interface Message {
   id: string;
@@ -57,8 +58,6 @@ const suggestedPrompts = [
   "How long should my breaks be?"
 ];
 
-const GEMINI_API_ENDPOINT = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
-
 const TimeManagementAI: React.FC = () => {
   const { toast } = useToast();
   const { getProductivityPatterns, timeEntries } = useTasks();
@@ -67,9 +66,7 @@ const TimeManagementAI: React.FC = () => {
   const [currentMessage, setCurrentMessage] = useState('');
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [currentSuggestion, setCurrentSuggestion] = useState('');
-  const [apiKey, setApiKey] = useState(() => {
-    return localStorage.getItem('geminiApiKey') || '';
-  });
+  const [apiKey, setApiKey] = useState(getStoredApiKey);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
@@ -116,10 +113,6 @@ const TimeManagementAI: React.FC = () => {
     return () => clearTimeout(suggestionTimer);
   }, [isOpen, messages, showSuggestion, timeEntries.length, apiKey]);
 
-  const validateApiKey = (key: string): boolean => {
-    return key.length >= 30;
-  };
-
   const generateProductivityInsight = async () => {
     if (timeEntries.length === 0 || !apiKey || !validateApiKey(apiKey)) return;
     
@@ -139,44 +132,14 @@ Provide a single, specific insight or actionable tip (1-2 sentences) based on ON
 Make it personalized, evidence-based, and directly connected to the data provided.
 `;
 
-      const response = await fetch(GEMINI_API_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt }
-              ]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 100,
-          }
-        })
+      const suggestionText = await sendPromptToGemini(prompt, apiKey, {
+        temperature: 0.7,
+        maxOutputTokens: 100
       });
-
-      const data = await response.json();
       
-      if (!response.ok) {
-        console.error("Gemini API error:", data);
-        return;
-      }
-
-      let suggestionText = "";
-      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-        suggestionText = data.candidates[0].content.parts[0].text.trim();
-        
-        if (patterns.totalTimeSpent > 0) {
-          setCurrentSuggestion(suggestionText);
-          setShowSuggestion(true);
-        }
+      if (patterns.totalTimeSpent > 0) {
+        setCurrentSuggestion(suggestionText);
+        setShowSuggestion(true);
       }
     } catch (error) {
       console.error("Error generating productivity insight:", error);
@@ -246,41 +209,10 @@ If you don't have enough data (e.g., if total tracked time is 0), let the user k
 Keep your response under 200 words.
 `;
 
-      const response = await fetch(GEMINI_API_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt }
-              ]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.4,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 500,
-          }
-        })
+      const responseText = await sendPromptToGemini(prompt, apiKey, {
+        temperature: 0.4,
+        maxOutputTokens: 500
       });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to get response from Gemini API");
-      }
-
-      let responseText = "";
-      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-        responseText = data.candidates[0].content.parts[0].text.trim();
-      } else {
-        responseText = "Sorry, I couldn't generate a proper response. Please try again later.";
-      }
       
       const aiMessage: Message = {
         id: Date.now().toString(),
@@ -296,7 +228,9 @@ Keep your response under 200 words.
       
       const errorMessage: Message = {
         id: Date.now().toString(),
-        text: "Sorry, there was an error communicating with the Gemini API. Please check your API key and try again.",
+        text: error instanceof Error 
+          ? `Sorry, there was an error: ${error.message}`
+          : "Sorry, there was an error communicating with the Gemini API. Please check your API key and try again.",
         sender: 'ai',
         timestamp: new Date(),
       };
@@ -347,7 +281,7 @@ Keep your response under 200 words.
     }
     
     setApiKey(newApiKey);
-    localStorage.setItem('geminiApiKey', newApiKey);
+    storeApiKey(newApiKey);
     toast({
       title: "API Key Saved",
       description: "Your Gemini API key has been saved.",

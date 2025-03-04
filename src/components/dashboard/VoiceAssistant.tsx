@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { sendPromptToGemini, validateApiKey, getStoredApiKey, storeApiKey } from '@/utils/geminiApi';
 
 interface SpeechRecognition extends EventTarget {
   continuous: boolean;
@@ -35,17 +36,13 @@ interface Window {
   webkitSpeechRecognition: new () => SpeechRecognition;
 }
 
-const GEMINI_API_ENDPOINT = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
-
 const VoiceAssistant: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [response, setResponse] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
-  const [apiKey, setApiKey] = useState(() => {
-    return localStorage.getItem('geminiApiKey') || '';
-  });
+  const [apiKey, setApiKey] = useState(getStoredApiKey);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const { toast } = useToast();
   const { addTask, getProductivityPatterns, getSleepPatterns } = useTasks();
@@ -89,10 +86,6 @@ const VoiceAssistant: React.FC = () => {
       }
     };
   }, [toast]);
-
-  const validateApiKey = (key: string): boolean => {
-    return key.length >= 30;
-  };
 
   const toggleListening = () => {
     if (!isSupported) {
@@ -170,41 +163,10 @@ For commands about sleep or productivity, provide a brief data-based insight.
 Keep responses concise and actionable.
 `;
 
-      const response = await fetch(GEMINI_API_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt }
-              ]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 300,
-          }
-        })
+      const responseText = await sendPromptToGemini(prompt, apiKey, {
+        temperature: 0.2,
+        maxOutputTokens: 300
       });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to get response from Gemini API");
-      }
-
-      let responseText = "";
-      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-        responseText = data.candidates[0].content.parts[0].text;
-      } else {
-        responseText = "Sorry, I couldn't generate a proper response.";
-      }
       
       setResponse(responseText);
       
@@ -236,7 +198,8 @@ Keep responses concise and actionable.
       
     } catch (error) {
       console.error("Error processing with Gemini:", error);
-      setResponse("Sorry, there was an error processing your request with Gemini. Please check your API key and try again.");
+      setResponse("Sorry, there was an error processing your request. " + 
+        (error instanceof Error ? error.message : "Please check your API key and try again."));
       
       toast({
         title: "Gemini API Error",
@@ -291,7 +254,7 @@ Keep responses concise and actionable.
     }
     
     setApiKey(newApiKey);
-    localStorage.setItem('geminiApiKey', newApiKey);
+    storeApiKey(newApiKey);
     toast({
       title: "API Key Saved",
       description: "Your Gemini API key has been saved.",

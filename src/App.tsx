@@ -7,6 +7,9 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { TaskProvider } from "@/context/TaskContext";
+import { useEffect } from "react";
+import { toast } from "sonner";
+import { getStoredApiKey } from "@/utils/geminiApi";
 
 import Layout from "@/components/layout/Layout";
 import Index from "@/pages/Index";
@@ -31,6 +34,20 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 const AppRoutes = () => {
+  // Check if API key exists and notify user if it doesn't
+  useEffect(() => {
+    const apiKey = getStoredApiKey();
+    if (!apiKey) {
+      toast.info(
+        "Gemini AI features require an API key",
+        {
+          description: "Go to any AI assistant settings to set up your Gemini API key",
+          duration: 8000,
+        }
+      );
+    }
+  }, []);
+
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
