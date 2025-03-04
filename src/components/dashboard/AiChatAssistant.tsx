@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, User, Send, X, Sparkles, Calendar, Lightbulb, Settings, Loader2 } from 'lucide-react';
+import { Bot, User, Send, X, Sparkles, Lightbulb, Settings, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -43,6 +43,8 @@ const suggestedPrompts = [
   "Help me prioritize my tasks",
   "Generate a weekly planning template"
 ];
+
+const GEMINI_API_ENDPOINT = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
 
 const AiChatAssistant: React.FC = () => {
   const { toast } = useToast();
@@ -100,8 +102,12 @@ const AiChatAssistant: React.FC = () => {
     return () => clearTimeout(suggestionTimer);
   }, [isOpen, messages, showSuggestion, apiKey]);
 
+  const validateApiKey = (key: string): boolean => {
+    return key.length >= 30;
+  };
+
   const callGeminiForSuggestion = async () => {
-    if (!apiKey) return;
+    if (!apiKey || !validateApiKey(apiKey)) return;
     
     try {
       const prompt = `
@@ -113,7 +119,7 @@ Examples of good suggestions:
 - "Research shows that short breaks between meetings reduce stress and improve decision-making. Try adding 5-10 minute buffers."
 `;
 
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
+      const response = await fetch(GEMINI_API_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -165,6 +171,15 @@ Examples of good suggestions:
       });
       return;
     }
+
+    if (!validateApiKey(apiKey)) {
+      toast({
+        title: "Invalid API Key",
+        description: "Your Gemini API key appears to be invalid. Please check it and try again.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -196,7 +211,7 @@ User's latest message: ${userMessage.text}
 Respond in a friendly, conversational tone. Keep your response under 200 words. If the user asks about scheduling, planning, or productivity concepts, provide evidence-based advice.
 `;
 
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
+      const response = await fetch(GEMINI_API_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -287,6 +302,15 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
   };
 
   const handleApiKeySave = (newApiKey: string) => {
+    if (!validateApiKey(newApiKey)) {
+      toast({
+        title: "Invalid API Key",
+        description: "The API key appears to be invalid. Please provide a valid Gemini API key.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setApiKey(newApiKey);
     localStorage.setItem('geminiApiKey', newApiKey);
     toast({
@@ -357,6 +381,9 @@ Respond in a friendly, conversational tone. Keep your response under 200 words. 
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Your API key is stored locally in your browser and never sent to our servers.
+                    </div>
+                    <div className="text-xs font-medium text-amber-600">
+                      Note: Make sure to use a valid API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline">Google AI Studio</a>
                     </div>
                   </div>
                   <DialogFooter>

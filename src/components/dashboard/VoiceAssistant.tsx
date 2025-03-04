@@ -35,6 +35,8 @@ interface Window {
   webkitSpeechRecognition: new () => SpeechRecognition;
 }
 
+const GEMINI_API_ENDPOINT = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
+
 const VoiceAssistant: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -88,6 +90,10 @@ const VoiceAssistant: React.FC = () => {
     };
   }, [toast]);
 
+  const validateApiKey = (key: string): boolean => {
+    return key.length >= 30;
+  };
+
   const toggleListening = () => {
     if (!isSupported) {
       toast({
@@ -102,6 +108,15 @@ const VoiceAssistant: React.FC = () => {
       toast({
         title: "API Key Missing",
         description: "Please set your Gemini API key in settings first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!validateApiKey(apiKey)) {
+      toast({
+        title: "Invalid API Key",
+        description: "Your Gemini API key appears to be invalid. Please check it and try again.",
         variant: "destructive"
       });
       return;
@@ -155,7 +170,7 @@ For commands about sleep or productivity, provide a brief data-based insight.
 Keep responses concise and actionable.
 `;
 
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
+      const response = await fetch(GEMINI_API_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -266,6 +281,15 @@ Keep responses concise and actionable.
   };
 
   const handleApiKeySave = (newApiKey: string) => {
+    if (!validateApiKey(newApiKey)) {
+      toast({
+        title: "Invalid API Key",
+        description: "The API key appears to be invalid. Please provide a valid Gemini API key.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setApiKey(newApiKey);
     localStorage.setItem('geminiApiKey', newApiKey);
     toast({
@@ -307,6 +331,9 @@ Keep responses concise and actionable.
               </div>
               <div className="text-xs text-muted-foreground">
                 Your API key is stored locally in your browser and never sent to our servers.
+              </div>
+              <div className="text-xs font-medium text-amber-600">
+                Note: Make sure to use a valid API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline">Google AI Studio</a>
               </div>
             </div>
             <DialogFooter>

@@ -57,6 +57,8 @@ const suggestedPrompts = [
   "How long should my breaks be?"
 ];
 
+const GEMINI_API_ENDPOINT = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
+
 const TimeManagementAI: React.FC = () => {
   const { toast } = useToast();
   const { getProductivityPatterns, timeEntries } = useTasks();
@@ -114,8 +116,12 @@ const TimeManagementAI: React.FC = () => {
     return () => clearTimeout(suggestionTimer);
   }, [isOpen, messages, showSuggestion, timeEntries.length, apiKey]);
 
+  const validateApiKey = (key: string): boolean => {
+    return key.length >= 30;
+  };
+
   const generateProductivityInsight = async () => {
-    if (timeEntries.length === 0 || !apiKey) return;
+    if (timeEntries.length === 0 || !apiKey || !validateApiKey(apiKey)) return;
     
     try {
       const patterns = getProductivityPatterns();
@@ -133,7 +139,7 @@ Provide a single, specific insight or actionable tip (1-2 sentences) based on ON
 Make it personalized, evidence-based, and directly connected to the data provided.
 `;
 
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
+      const response = await fetch(GEMINI_API_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -189,6 +195,15 @@ Make it personalized, evidence-based, and directly connected to the data provide
       return;
     }
     
+    if (!validateApiKey(apiKey)) {
+      toast({
+        title: "Invalid API Key",
+        description: "Your Gemini API key appears to be invalid. Please check it and try again.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     const userMessage: Message = {
       id: Date.now().toString(),
       text: currentMessage,
@@ -231,7 +246,7 @@ If you don't have enough data (e.g., if total tracked time is 0), let the user k
 Keep your response under 200 words.
 `;
 
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", {
+      const response = await fetch(GEMINI_API_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -322,6 +337,15 @@ Keep your response under 200 words.
   };
 
   const handleApiKeySave = (newApiKey: string) => {
+    if (!validateApiKey(newApiKey)) {
+      toast({
+        title: "Invalid API Key",
+        description: "The API key appears to be invalid. Please provide a valid Gemini API key.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setApiKey(newApiKey);
     localStorage.setItem('geminiApiKey', newApiKey);
     toast({
@@ -392,6 +416,9 @@ Keep your response under 200 words.
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Your API key is stored locally in your browser and never sent to our servers.
+                    </div>
+                    <div className="text-xs font-medium text-amber-600">
+                      Note: Make sure to use a valid API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline">Google AI Studio</a>
                     </div>
                   </div>
                   <DialogFooter>
