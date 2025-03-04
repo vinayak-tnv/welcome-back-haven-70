@@ -41,7 +41,7 @@ const AppRoutes = () => {
       toast.info(
         "Gemini AI features require an API key",
         {
-          description: "Go to any AI assistant settings to set up your Gemini API key",
+          description: "Please set up your Gemini API key in settings",
           duration: 8000,
         }
       );
